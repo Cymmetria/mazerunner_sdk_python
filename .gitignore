@@ -1,0 +1,10 @@
+*.pyc
+*.exe
+*.zip
+*.msi
+.idea
+*.swp
+mazerunner_sdk_venv
+build
+mazerunner_sdk.egg-info/
+dist
