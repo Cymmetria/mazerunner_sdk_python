@@ -641,8 +641,7 @@ class AlertCollection(Collection):
                     delete_all_filtered=delete_all_filtered)
         query_params = self._get_query_params()
         self._api_client.api_request("{}{}".format(self._get_url(), 'delete_selected/'), 'post', data=data,
-                                     query_params=query_params)
-
+                                     query_params=query_params)    
 
 class Alert(BaseEntity):
     """
@@ -709,6 +708,56 @@ class Alert(BaseEntity):
         with open(file_path, 'wb') as f:
             response.raw.decode_content = True
             shutil.copyfileobj(response.raw, f)
+
+class EndpointCollection(Collection):
+    """
+    A subset of the endpoints in the system
+
+    This entity will be returned by :func:`~mazerunner.api_client.APIClient.endpoints`
+    """
+    def __init__(self, api_client, obj_class, filter_enabled=False, keywords=""):
+        super(EndpointCollection, self).__init__(api_client, obj_class)
+        self.filter_enabled = filter_enabled
+        self.keywords = keywords
+
+    def _get_query_params(self):
+        return dict(filter_enabled=self.filter_enabled,
+                    keywords=self.keywords)
+
+    def filter(self, keywords=""):
+        """
+        Get endpoints by query
+
+        :param keywords: Search keywords
+        :return: A filtered EndpointCollection
+        """
+        return EndpointCollection(self._api_client, Endpoint, filter_enabled=True, keywords=keywords)
+
+    def reassign_to_group(self, deployment_group, endpoints):
+        """
+        Assign endpoints to a deployment group.
+
+        :param deployment_group: The deployment group to assign to.
+        :param endpoints: A list of endpoints that should be assigned.
+        """
+        data = dict(
+            to_group=deployment_group.id,
+            selected_endpoints_ids=[e.id for e in endpoints])
+
+        self._api_client.api_request(
+            "{}{}".format(self._get_url(), 'reassign_selected/'),
+            method='POST',
+            data=data)
+
+class Endpoint(Entity):
+    """
+    Endpoint entity
+    """
+    NAME = 'endpoint'
+
+    def delete(self):
+        """Delete the endpoint"""
+        self._api_client.api_request(self.url, 'delete')
 
 
 class APIClient(object):
@@ -912,3 +961,17 @@ class APIClient(object):
             code_alerts = client.alerts.filter(alert_types=['code'])
         """
         return AlertCollection(self, Alert)
+
+
+    @property
+    def endpoints(self):
+        """
+        Get a :func:`~mazerunner.api_client.EndpointCollection` instance, on which you can
+        perform CRUD operations:
+
+        Example::
+
+            client = mazerunner.connect(...)
+            code_alerts = client.endpoints.filter(keywords="somethings")
+        """
+        return EndpointCollection(self, Endpoint)

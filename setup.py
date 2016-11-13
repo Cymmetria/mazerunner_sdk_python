@@ -11,6 +11,6 @@ setup(
     download_url='https://github.com/Cymmetria/mazerunner_sdk_python/tarball/1.0.0',
     license='BSD 3-Clause',
     keywords=['cymmetria', 'mazerunner', 'sdk', 'api'],
-    install_requires=["requests", "requests-hawk"],
+    install_requires=["requests", "requests-hawk", "netaddr"],
     classifiers=[],
 )
