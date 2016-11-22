@@ -1,4 +1,8 @@
+import json
 import logging
+
+import pytest
+
 import mazerunner
 import os
 
@@ -18,7 +22,18 @@ class MachineStatus(object):
 class APITest(object):
     def setup_method(self, method):
         logger.debug("setup_method called")
-        self.client = mazerunner.connect("192.168.1.36", "anJ7roZe", "gL53x3bOjIOOLVOny3mK5wNRtQJYEp4W", None)
+        ip_address = pytest.config.option.ip_address
+
+        with open(pytest.config.option.json_credentials, 'rb') as file_reader:
+            json_dict = json.load(file_reader)
+            api_key = json_dict["id"]
+            api_secret = json_dict["secret"]
+
+        self.client = mazerunner.connect(
+            ip_address=ip_address,
+            api_key=api_key,
+            api_secret=api_secret,
+            certificate=None)
 
         self.deployment_groups = self.client.deployment_groups
         self.breadcrumbs = self.client.breadcrumbs
@@ -100,6 +115,7 @@ SSH_SERVICE_NAME_UPDATE = "ssh_service_update"
 SSH_DECOY_NAME_UPDATE = "ssh_decoy_update"
 
 OVA_DECOY = "ova_decoy"
+
 
 class TestSSH(APITest):
     def test_ssh(self):
