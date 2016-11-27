@@ -52,7 +52,8 @@ class APITest(object):
             entity.delete()
         # clean files:
         for file_path in self.file_paths_for_cleanup:
-            os.remove(file_path)
+            if os.path.exists(file_path):
+                os.remove(file_path)
 
     def valid_decoy_status(self, decoy, wanted_statuses):
         logger.debug("valid_decoy_status called")
