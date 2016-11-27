@@ -145,13 +145,14 @@ class TestSSH(APITest):
         self.assert_entity_name_in_collection(SSH_DECOY_NAME, service_ssh.attached_decoys)
         # power on decoy:
         self.power_on_decoy(decoy_ssh)
+        decoy_ssh.load()
         assert decoy_ssh.machine_status == MachineStatus.ACTIVE
         # get deployment file:
         deployment_file_path = "mazerunner/test_file"
         download_format = "ZIP"
         breadcrumb_ssh.deploy(location_with_name=deployment_file_path, os="Windows", download_type="install",
                               download_format=download_format)
-        self.file_paths_for_cleanup.append("{}.{}".format(deployment_file_path, download_format))
+        self.file_paths_for_cleanup.append("{}.{}".format(deployment_file_path, download_format.lower()))
         # add / remove deployment group:
         breadcrumb_ssh.remove_from_group(deployment_group.id)
         self.assert_entity_name_not_in_collection(SSH_GROUP_NAME, breadcrumb_ssh.deployment_groups)
@@ -194,6 +195,7 @@ class TestSSH(APITest):
         self.assert_entity_name_not_in_collection(SSH_DECOY_NAME, service_ssh.attached_decoys)
         # power off decoy:
         self.power_off_decoy(decoy_ssh)
+        decoy_ssh.load()
         assert decoy_ssh.machine_status == MachineStatus.INACTIVE
 
     def test_ova(self):
