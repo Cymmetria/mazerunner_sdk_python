@@ -386,13 +386,15 @@ class DeploymentGroupCollection(EditableCollection):
         )
         return self.create_item(data)
 
-    def groups_for_auto_deploy(self):
-        """
-        """
-        return self._api_client.api_request("{}{}".format(self._get_url(), "groups_for_auto_deploy/"))
-
     def test_deployment_credentials(self, username, password, addr, install_method, domain=None):
         """
+
+        :param username:
+        :param password:
+        :param addr:
+        :param install_method:
+        :param domain:
+        :return: test results dict consisting of "success" flag and "reason" string when success=False
         """
         data = dict(
             username=username,
@@ -401,12 +403,10 @@ class DeploymentGroupCollection(EditableCollection):
             install_method=install_method,
             domain=domain
         )
-        self._api_client.api_request("{}{}".format(self._get_url(), "test_deployment_credentials/"), 'post', data=data)
+        return self._api_client.api_request("{}{}".format(self._get_url(), "test_deployment_credentials/"), 'post', data=data)
 
     def auto_deploy_groups(self, username, password, deployment_groups_ids, install_method, run_method, domain=None,
                            deploy_on="all"):
-        """
-        """
         data = dict(
             username=username,
             password=password,
@@ -480,8 +480,6 @@ class DeploymentGroup(Entity):
             shutil.copyfileobj(response.raw, f)
 
     def auto_deploy(self, username, password, install_method, run_method, domain=None, deploy_on="all"):
-        """
-        """
         data = dict(
             username=username,
             password=password,
