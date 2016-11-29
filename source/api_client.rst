@@ -57,6 +57,33 @@ Alert
    :members:
 
 
+Endpoint
+========
+.. autoclass:: mazerunner.api_client.Endpoint
+   :members:
+
+.. autoclass:: mazerunner.api_client.EndpointCollection
+   :members:
+
+
+AlertPolicy
+===========
+.. autoclass:: mazerunner.api_client.AlertPolicy
+   :members:
+
+.. autoclass:: mazerunner.api_client.AlertPolicyCollection
+   :members:
+
+
+AlertRule
+=========
+.. autoclass:: mazerunner.api_client.AlertRule
+   :members:
+
+.. autoclass:: mazerunner.api_client.AlertRuleCollection
+   :members:
+
+
 Abstract Helpers
 ================
 .. autoclass:: mazerunner.api_client.Entity

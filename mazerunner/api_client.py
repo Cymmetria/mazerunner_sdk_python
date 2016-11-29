@@ -116,7 +116,7 @@ class BaseEntity(object):
         self._api_client = api_client
         self._param_dict = dict()
         self._update_entity_data(param_dict)
-        self._update_related_collection_fields()
+        self._update_related_fields()
 
     def __repr__(self):
         properties = ' '.join('%s=%s' % (key, repr(value)) for key, value in self._param_dict.items())
@@ -129,7 +129,7 @@ class BaseEntity(object):
             self.load()
             return super(BaseEntity, self).__getattribute__(attrname)
 
-    def _update_related_collection_fields(self):
+    def _update_related_fields(self):
         pass
 
     def _update_entity_data(self, data):
@@ -143,7 +143,7 @@ class BaseEntity(object):
         """
         response = self._api_client.api_request(self.url)
         self._update_entity_data(response)
-        self._update_related_collection_fields()
+        self._update_related_fields()
 
 
 class Entity(BaseEntity):
@@ -325,7 +325,7 @@ class Service(Entity):
     """
     NAME = 'service'
 
-    def _update_related_collection_fields(self):
+    def _update_related_fields(self):
         self.attached_decoys = RelatedCollection(self._api_client, Decoy, self._param_dict.get("attached_decoys", []))
         self.available_decoys = RelatedCollection(self._api_client, Decoy, self._param_dict.get("available_decoys", []))
 
@@ -529,7 +529,7 @@ class Breadcrumb(Entity):
     """
     NAME = 'breadcrumb'
 
-    def _update_related_collection_fields(self):
+    def _update_related_fields(self):
         self.attached_services = RelatedCollection(
             self._api_client, Decoy,
             self._param_dict.get("attached_services", []))
@@ -684,7 +684,7 @@ class AlertCollection(Collection):
                     delete_all_filtered=delete_all_filtered)
         query_params = self._get_query_params()
         self._api_client.api_request("{}{}".format(self._get_url(), 'delete_selected/'), 'post', data=data,
-                                     query_params=query_params)    
+                                     query_params=query_params)
 
 class Alert(BaseEntity):
     """
@@ -801,6 +801,62 @@ class Endpoint(Entity):
     def delete(self):
         """Delete the endpoint"""
         self._api_client.api_request(self.url, 'delete')
+
+
+class AlertPolicyCollection(Collection):
+    def reset_all_to_default(self):
+        """
+        Reset the 'to_status' of all alert policies back to their defaults
+        """
+        self._api_client.api_request("{}{}".format(self._get_url(), 'reset_all/'), 'post')
+
+
+class AlertPolicy(BaseEntity):
+    NAME = 'alert-policy'
+
+    def update_to_status(self, to_status):
+        """
+        Update the 'to_status' of the policy
+
+        :param to_status: The name of the new 'to_status' of the policy
+        """
+        data = dict(to_status=to_status)
+        response = self._api_client.api_request(self.url, 'put', data=data)
+        self._update_entity_data(response)
+
+
+class AlertRuleCollection(EditableCollection):
+    def create(self, **kwargs):
+        """Create an alert rule"""
+        return self.create_item(kwargs)
+
+
+class AlertRule(Entity):
+    NAME = 'alert-rule'
+
+    def _update_related_fields(self):
+        decoy_param = self._param_dict.get("decoy", None)
+        if decoy_param:
+            self.decoy = Decoy(self._api_client, decoy_param)
+        service_param = self._param_dict.get("service", None)
+        if service_param:
+            self.service = Service(self._api_client, service_param)
+
+    def update(self, decoy, service, originating_ip, filename, alert_type, to_status):
+        """Update all the alert rule attributes"""
+        data = dict(
+            decoy=decoy,
+            service=service,
+            originating_ip=originating_ip,
+            filename=filename,
+            alert_type=alert_type,
+            to_status=to_status
+        )
+        self._update_item(data)
+
+    def partial_update(self, **kwargs):
+        """Update only specified alert rule attributes"""
+        self._partial_update_item(kwargs)
 
 
 class APIClient(object):
@@ -1018,3 +1074,32 @@ class APIClient(object):
             code_alerts = client.endpoints.filter(keywords="somethings")
         """
         return EndpointCollection(self, Endpoint)
+
+    @property
+    def alert_policies(self):
+        """
+        Get a :func:`~mazerunner.api_client.AlertPolicyCollection` instance, on which you can
+        perform update operations:
+
+        Example::
+
+            client = mazerunner.connect(...)
+            code_alerts = client.alert_policies.reset_all()
+        """
+        return AlertPolicyCollection(self, AlertPolicy)
+
+    @property
+    def alert_rules(self):
+        """
+        Get a :func:`~mazerunner.api_client.AlertRuleCollection` instance, on which you can
+        perform CRUD operations:
+
+        Example::
+
+            client = mazerunner.connect(...)
+            mute_ip_rule = client.alert_policies.create(
+                originating_ip="192.168.1.5"
+                alert_type="any"
+                to_status=1)
+        """
+        return AlertRuleCollection(self, AlertRule)
