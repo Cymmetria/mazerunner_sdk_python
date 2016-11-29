@@ -84,6 +84,15 @@ AlertRule
    :members:
 
 
+BackgroundTask
+==============
+.. autoclass:: mazerunner.api_client.BackgroundTask
+   :members:
+
+.. autoclass:: mazerunner.api_client.BackgroundTaskCollection
+   :members:
+
+
 Abstract Helpers
 ================
 .. autoclass:: mazerunner.api_client.Entity
