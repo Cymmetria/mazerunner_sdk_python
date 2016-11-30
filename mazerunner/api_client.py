@@ -901,6 +901,33 @@ class AlertRule(Entity):
         self._partial_update_item(kwargs)
 
 
+class ActiveSocEventRegistration(Entity):
+    """
+    Active Soc API For create ActiveSoc Alerts
+    Those alerts will pass to filter on all relevant rules
+    """
+    NAME = 'api-soc'
+
+
+class ActiveSocEventRegistrationCollection(EditableCollection):
+    def create(self, soc_name, event_dict):
+        """
+        Register single event into Active Soc
+        """
+        return self.create_multiple_registrations(soc_name, [event_dict])
+
+    def create_multiple_registrations(self, soc_name, event_dicts):
+        """
+         register multiple events into Active Soc
+        """
+
+        data = dict(
+            source=soc_name,
+            data=event_dicts
+        )
+        self._api_client.api_request(self._get_url(), 'post', data=data)
+
+
 class APIClient(object):
     """
     This is the starting point for any interaction with MazeRunner
@@ -1103,7 +1130,6 @@ class APIClient(object):
         """
         return AlertCollection(self, Alert)
 
-
     @property
     def endpoints(self):
         """
@@ -1139,6 +1165,7 @@ class APIClient(object):
         Example::
 
             client = mazerunner.connect(...)
+            code_alerts = client.active_soc.register_event(soc_name='name', event_dict=dict(key="Value", key2="Value2"))
             mute_ip_rule = client.alert_policies.create(
                 originating_ip="192.168.1.5"
                 alert_type="any"
@@ -1158,3 +1185,11 @@ class APIClient(object):
             completed_tasks = client.background_tasks.filter(running=False)
         """
         return BackgroundTaskCollection(self, BackgroundTask)
+
+    @property
+    def active_soc_registration(self):
+        """
+        Get a :func:`~mazerunner.api_client.ActiveSocEventRegistrationCollection` instance, on which you can
+        Create Active Soc events
+        """
+        return ActiveSocEventRegistrationCollection(self, ActiveSocEventRegistration)

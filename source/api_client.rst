@@ -112,3 +112,12 @@ Abstract Helpers
 
 .. autoclass:: mazerunner.api_client.BaseCollection
    :members:
+
+
+Active Soc Registration
+=======================
+.. autoclass:: mazerunner.api_client.ActiveSocEventRegistration
+   :members:
+
+.. autoclass:: mazerunner.api_client.ActiveSocEventRegistrationCollection
+   :members:
