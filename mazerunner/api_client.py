@@ -532,13 +532,13 @@ class Breadcrumb(Entity):
 
     def _update_related_fields(self):
         self.attached_services = RelatedCollection(
-            self._api_client, Decoy,
+            self._api_client, Service,
             self._param_dict.get("attached_services", []))
         self.available_services = RelatedCollection(
-            self._api_client, Decoy,
+            self._api_client, Service,
             self._param_dict.get("available_services", []))
         self.deployment_groups = RelatedCollection(
-            self._api_client, Decoy,
+            self._api_client, DeploymentGroup,
             self._param_dict.get("deployment_groups", []))
 
     def update(self, name, **kwargs):
