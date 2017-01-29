@@ -1,8 +1,6 @@
 import shutil
 import requests
 import requests_hawk
-
-from mazerunner.ssl_adapter import SSLIgnoreHostnameAdapter
 from mazerunner.exceptions import ValidationError, ServerError
 
 
@@ -978,8 +976,6 @@ class APIClient(object):
             self._certificate = certificate
         self._base_url = '%(schema)s://%(host)s' % dict(schema=schema, host=host)
         self._session = requests.Session()
-        if not use_http:
-            self._session.mount(self._base_url, SSLIgnoreHostnameAdapter())
         self._api_urls = self.api_request('/api/v1.0/')
 
     def api_request(self,
