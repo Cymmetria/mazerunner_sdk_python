@@ -1161,7 +1161,7 @@ class APIClient(object):
         Example::
 
             client = mazerunner.connect(...)
-            code_alerts = client.active_soc.register_event(soc_name='name', event_dict=dict(key="Value", key2="Value2"))
+            code_alerts = client.active_soc_registration.create(soc_name='name', event_dict=dict(key="Value", key2="Value2"))
             mute_ip_rule = client.alert_policies.create(
                 originating_ip="192.168.1.5"
                 alert_type="any"

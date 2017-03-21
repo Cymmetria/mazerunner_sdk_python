@@ -27,3 +27,9 @@ track_live_alerts
    :members:
    :undoc-members:
 
+deploy_to_linux
+=================
+.. automodule:: mazerunner.samples.deploy_to_linux
+   :members:
+   :undoc-members:
+
