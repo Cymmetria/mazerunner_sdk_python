@@ -133,14 +133,16 @@ BREADCRUMB_NAME = 'Automated %s breadcrumb - %s'
 
 def get_args():
     """
-    Configure parser the command parameters
+    Configure command arguments parser.
     """
     parser = argparse.ArgumentParser()
     parser.add_argument('ip_address', type=str, help='IP address of MazeRunner management server')
     parser.add_argument('api_key', type=str, help='The API key')
     parser.add_argument('api_secret', type=str, help='The API secret')
     parser.add_argument('certificate',
-                        type=str, help='The file path to the SSL certificate of the MazeRunner management server')
+                        type=str,
+                        help='The file path to the SSL certificate of the '
+                             'MazeRunner management server')
     parser.add_argument('deployment_group_name', type=str, help='The name of the deployment group to be created')
     parser.add_argument('username', type=str, help='The username that will be shared among the breadcrumbs')
     parser.add_argument('os', type=str, choices=['Windows', 'Linux'],
@@ -167,12 +169,12 @@ def _get_password(passwords_file):
 
 def create_decoy_if_needed(client, decoy_key):
     """
-    Create and power on a decoy, if we don't have any.
+    Create and power on a decoy, if non exist already.
 
-    Decoys are virtual machines, to which we want to attract the attacker
+    Decoys are virtual machines, to which we want to attract the attacker.
 
-    :param client: An existing connection (the result of mazerunner.connect)
-    :param decoy_key: The key in the DECOY_DATA hash of the desired decoy
+    :param client: An existing connection (the result of mazerunner.connect).
+    :param decoy_key: The key in the DECOY_DATA hash of the desired decoy.
     """
     decoy_data = DECOY_DATA[decoy_key]
     decoys = [decoy for decoy in list(client.decoys) if decoy.name == decoy_data['name']]
@@ -196,9 +198,10 @@ def create_service_if_needed(client, service_data):
     Create a service.
 
     Services are applications installed on the decoys, to which we would like the attacker
-    try to login.
-    :param client: An existing connection (the result of mazerunner.connect)
-    :param service_data: Arguments for the service configuration
+    to try to log in.
+
+    :param client: An existing connection (the result of mazerunner.connect).
+    :param service_data: Arguments for the service configuration.
     """
     service_type = service_data['type']
     service_name = SERVICE_NAME % service_type
@@ -228,17 +231,16 @@ def create_breadcrumb(client, breadcrumb_type, breadcrumb_data, username, passwo
     """
     Create a breadcrumb.
 
-    Breadcrumbs are the configuration of a user and its credentials. The user will be created
-    on the service and the credentials will be deployed to the endpoints (computers in the
-    organization), so the attacker will find them and try to connect to the service
-    on the decoy.
-    :param client: An existing connection (the result of mazerunner.connect)
-    :param breadcrumb_type: Browser cookie, mysql connection command, smb path, etc
-    :param breadcrumb_data: Some configuration info of the breadcrumb
-    :param username: The user we'd like to create on the service, which the attacker is intended
-    to find and use.
+    A breadcrumb consists of connection credentials deployed on an endpoint. An attacker will find
+    and use these credentials to connect to a service on a decoy.
+
+    :param client: An existing connection (the result of mazerunner.connect).
+    :param breadcrumb_type: Browser cookie, MySQL connection command, SMB path, etc.
+    :param breadcrumb_data: Breadcrumb configuration dict.
+    :param username: The user we would like to create on the service, which the attacker is \
+    intended to find and use.
     :param password: The password of that user.
-    :param group_name: A deployment group to which the breadcrumb should belong
+    :param group_name: A deployment group to which the breadcrumb should belong.
     """
     print "Creating %s breadcrumb" % breadcrumb_type
     args = breadcrumb_data['args']
@@ -260,14 +262,13 @@ def main():
     """
     Here's the procedure:
 
-        * Parse the command args
-        * Configure connection to MazeRunner, store in the 'client' variable
-        * Create a deployment group (which is a logical group of breadcrumbs)
-        * Create the breadcrumbs, and their required services and decoy (see create_breadcrumb, \
-            create_service_if_needed, create_decoy_if_needed)
-        * Load the deployment group info from the server, wait for all the info to arrive.
-        * Deploy the deployment groups
-
+        * Parse the command args.
+        * Configure connection to MazeRunner; store in the 'client' variable.
+        * Create a deployment group (which is a logical group of breadcrumbs).
+        * Create the breadcrumbs and their required services and decoy (see create_breadcrumb, \
+            create_service_if_needed, create_decoy_if_needed).
+        * Load the deployment group info from the server; wait for all the info to arrive.
+        * Deploy the deployment groups.
     """
     args = get_args()
 

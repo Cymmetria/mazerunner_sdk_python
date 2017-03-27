@@ -1,100 +1,111 @@
+from httplib import NO_CONTENT
 import shutil
+from numbers import Number
+
 import requests
 import requests_hawk
-from mazerunner.exceptions import ValidationError, ServerError
+from mazerunner.exceptions import ValidationError, ServerError, BadParamError, \
+    InvalidInstallMethodError
 
 
 class BaseCollection(object):
-    """
-    Base class of all collection classes
-    """
-    def __init__(self, api_client, obj_class):
+    MODEL_CLASS = None
+
+    def __init__(self, api_client, obj_class=None):
+        """
+        :param api_client: The connection instance. 
+        :param obj_class: The class, instance of which all the members should be.
+        """
         self._api_client = api_client
-        self._obj_class = obj_class
+        self._obj_class = obj_class or self.MODEL_CLASS
 
 
 class Collection(BaseCollection):
-    """
-    This is the base class of EditableCollection and AlertCollection. The following methods are
-    applicable for the instances of the following classes: :class:`~AlertCollection`,
-    :class:`~DecoyCollection`, :class:`~ServiceCollection`, :class:`~BreadcrumbCollection`
-    and :class:`~DeploymentGroupCollection`
-    """
     def __len__(self):
         query_params = self._get_query_params()
         response = self._api_client.api_request(self._get_url(), query_params=query_params)
         return response['count']
 
     def __iter__(self):
-        for chunk in self.iter_chunks():
+        for chunk in self._iter_chunks():
             for obj in chunk:
                 yield obj
 
-    def iter_chunks(self):
-        """
-        Load all the collection data, page by page, until done.
-        """
+    def _iter_chunks(self):
         query_params = self._get_query_params()
         response = self._api_client.api_request(self._get_url(), query_params=query_params)
         results = response['results']
         while True:
             yield [self._obj_class(self._api_client, obj) for obj in results]
+
             # Get the next batch of objects if possible
-            if response['next']:
+            if response.get('next'):
                 response = self._api_client.api_request(response['next'], query_params=query_params)
                 results = response['results']
             else:
                 return
 
     def _get_url(self):
-        return self._api_client._api_urls[self._obj_class.NAME]
+        return self._api_client.api_urls[self._obj_class.NAME]
 
     def _get_query_params(self):
         return None
 
     def get_item(self, id):
         """
-        Get a specific item by id
+        Get a specific item by ID.
 
-        :param id: Desired item id
+        :param id: Desired item ID.
         """
         query_params = self._get_query_params()
-        response = self._api_client.api_request("{}{}/".format(self._get_url(), id), query_params=query_params)
+        response = self._api_client.api_request(url="{}{}/".format(self._get_url(), id),
+                                                query_params=query_params)
         return self._obj_class(self._api_client, response)
 
     def params(self):
-        """Request for the params of the collection"""
+        """
+        Request for information about the applicable values for the entity fields.
+        """
         response = self._api_client.api_request("{}{}/".format(self._get_url(), "params"))
         return response
 
 
 class EditableCollection(Collection):
-    """
-    This is the base class of Collection which is the base class of :class:`~DecoyCollection`,
-    :class:`~ServiceCollection`, :class:`~BreadcrumbCollection`
-    and :class:`~DeploymentGroupCollection`. The following actions are applicable for their
-    instances.
-    """
     def create_item(self, data, files=None):
         """
         Create an instance of the element.
 
-        It is recommended to prevent from using this method, and use the *create* methods of the
-        relevant inheriting class instead.
-        :param data: Element data
-        :param files: Relevant files paths to upload for the element
+        It is recommended to avoid using this method. Instead, use the *create* methods of the
+        relevant inheriting class.
+
+        :param data: Element data.
+        :param files: Relevant file paths to upload for the element.
         """
         response = self._api_client.api_request(self._get_url(), 'post', data=data, files=files)
         return self._obj_class(self._api_client, response)
 
 
-class RelatedCollection(BaseCollection):
-    """
-    This describes a collection of associated elements
-    """
-    def __init__(self, api_client, obj_class, items):
-        super(RelatedCollection, self).__init__(api_client, obj_class)
+class UnpaginatedEditableCollection(EditableCollection):
+    def __len__(self):
+        query_params = self._get_query_params()
+        response = self._api_client.api_request(self._get_url(), query_params=query_params)
+        return len(response)
 
+    def __iter__(self):
+        query_params = self._get_query_params()
+        response = self._api_client.api_request(self._get_url(), query_params=query_params)
+        for item_data in response:
+            yield self._obj_class(self._api_client, item_data)
+
+
+class RelatedCollection(BaseCollection):
+    def __init__(self, api_client, obj_class, items):
+        """
+        :param api_client: The connection instance.
+        :param obj_class: The class, instance of which all the members should be.
+        :param items: A list of raw dicts containing the data of the members.
+        """
+        super(RelatedCollection, self).__init__(api_client, obj_class)
         self._items = items
 
     def __len__(self):
@@ -106,50 +117,59 @@ class RelatedCollection(BaseCollection):
 
 
 class BaseEntity(object):
-    """
-    This is the base class of Alert and Entity.
-    The methods below are applicable for: :class:`~Decoy`, :class:`~Service`, :class:`~Breadcrumb`,
-    :class:`~DeploymentGroup` :class:`~Alert`
-    """
+    RELATED_COLLECTIONS = {}
+    RELATED_FIELDS = {}
+
     def __init__(self, api_client, param_dict):
+        """
+        :param api_client: The connection instance.
+        :param param_dict: A dict of the instance details.
+        """
         self._api_client = api_client
         self._param_dict = dict()
         self._update_entity_data(param_dict)
         self._update_related_fields()
 
     def __repr__(self):
-        properties = ' '.join('%s=%s' % (key, repr(value)) for key, value in self._param_dict.items())
+        properties = ' '.join('%s=%s' % (key, repr(value))
+                              for key, value
+                              in self._param_dict.items())
         return '<%s: %s>' % (self.__class__.__name__, properties)
 
-    def __getattribute__(self, attrname):
-        try:
-            return super(BaseEntity, self).__getattribute__(attrname)
-        except AttributeError:
-            self.load()
-            return super(BaseEntity, self).__getattribute__(attrname)
-
     def _update_related_fields(self):
-        pass
+        for key, field_type in self.RELATED_COLLECTIONS.iteritems():
+            setattr(self, key, RelatedCollection(self._api_client,
+                                                 field_type,
+                                                 self._param_dict.get(key, [])))
+
+        for key, field_type in self.RELATED_FIELDS.iteritems():
+            if key in self._param_dict:
+                setattr(self, key, field_type(self._api_client, self._param_dict[key]))
+
+    def __getattr__(self, item):
+        if item not in self._param_dict:
+            self.load()
+
+        if item not in self._param_dict:
+            raise AttributeError("'%s' object has no attribute '%s'" % (self.__class__.__name__,
+                                                                        item))
+
+        return self._param_dict[item]
 
     def _update_entity_data(self, data):
         self._param_dict.update(data)
-        for key, value in data.items():
-            setattr(self, key, value)
 
     def load(self):
         """
-        Using the element id, populate all the element info from the server.
+        Using the element ID, populate all of the element info from the server.
         """
         response = self._api_client.api_request(self.url)
         self._update_entity_data(response)
         self._update_related_fields()
+        return self
 
 
 class Entity(BaseEntity):
-    """
-    This is the base class of :class:`~Decoy`, :class:`~Service`, :class:`~Breadcrumb`,
-    and :class:`~DeploymentGroup`. The methods here are applicable for their instances.
-    """
     def _update_item(self, data, files=None):
         response = self._api_client.api_request(self.url, 'put', data=data, files=files)
         self._update_entity_data(response)
@@ -157,58 +177,17 @@ class Entity(BaseEntity):
     def _partial_update_item(self, data, files=None):
         non_empty_data = {key: value for key, value in data.iteritems() if value}
         if non_empty_data:
-            response = self._api_client.api_request(self.url, 'patch', data=non_empty_data, files=files)
+            response = self._api_client.api_request(url=self.url,
+                                                    method='patch',
+                                                    data=non_empty_data,
+                                                    files=files)
             self._update_entity_data(response)
 
     def delete(self):
-        """Exterminate"""
+        """
+        Delete this element.
+        """
         self._api_client.api_request(self.url, 'delete')
-
-
-class DecoyCollection(EditableCollection):
-    """
-    A subset of decoys in the system.
-
-    This entity will be returned by :func:`~mazerunner.api_client.APIClient.decoys`
-    """
-    def create(self, os, vm_type, name, hostname, chosen_static_ip=None, chosen_subnet=None, chosen_gateway=None,
-               chosen_dns=None, chosen_interface=None, vlan=None, ec2_region=None, ec2_subnet_id=None, account=None):
-        """
-        Create a decoy
-
-        Parameters:
-            :param os: OS installed on the server. Options: \
-            Ubuntu_1404/Windows_7/Windows_Server_2012/Windows_Server_2008
-            :param vm_type: Server type. KVM or OVA
-            :param name: Decoy name
-            :param hostname: The server name as an attacker sees it when they login to the server.
-            :param chosen_static_ip: A static ip for the server
-            :param chosen_subnet: Subnet mask
-            :param chosen_gateway: Default gateway address
-            :param chosen_dns: The dns server address (This is NOT the name of the decoy)
-            :param chosen_interface: The physical interface to which the decoy should be connected
-            :param vlan: vlan to which the decoy will be connected (if applicable)
-            :param ec2_region: EC2 region (e.g eu-west-1), if applicable.
-            :param ec2_subnet_id: EC2 Subnet id, if applicable
-            :param account: EC2 account id, if applicable
-        """
-        data = dict(
-            os=os,
-            vm_type=vm_type,
-            name=name,
-            hostname=hostname,
-            chosen_static_ip=chosen_static_ip,
-            chosen_subnet=chosen_subnet,
-            chosen_gateway=chosen_gateway,
-            chosen_dns=chosen_dns,
-            chosen_interface=chosen_interface,
-            vlan=vlan,
-            ec2_region=ec2_region,
-            ec2_subnet_id=ec2_subnet_id,
-            account=account
-        )
-        non_empty_data = {key:value for key, value in data.iteritems() if value}
-        return self.create_item(non_empty_data)
 
 
 class Decoy(Entity):
@@ -218,19 +197,22 @@ class Decoy(Entity):
     A decoy may be a KVM machine nested inside the MazeRunner machine,
     or an external machine downloaded as an OVA and manually deployed on an ESX machine.
     """
+
     NAME = 'decoy'
 
-    def update(self, name, chosen_static_ip=None, chosen_subnet=None, chosen_gateway=None, chosen_dns=None):
+    def update(self, name, chosen_static_ip=None, chosen_subnet=None, chosen_gateway=None,
+               chosen_dns=None, dns_address=''):
         """
-        Change decoy configuration
+        Change decoy configuration.
 
-        Parameters:
-            :param name: Decoy name
-            :param chosen_static_ip: Static ip to the decoy
-            :param chosen_subnet: Decoy subnet mask
-            :param chosen_gateway: Decoy default gateway (router address)
-            :param chosen_dns: The DNS server the decoy will use. This is not a dns name of the
-                decoy
+        :param name: Decoy name.
+        :param chosen_static_ip: Static IP of the decoy.
+        :param chosen_subnet: Decoy subnet mask.
+        :param chosen_gateway: Decoy default gateway (router address).
+        :param chosen_dns: The DNS server the decoy will use. This is not a DNS name of the \
+            decoy.
+        :param dns_address: The DNS name of the decoy. If set, the breadcrumbs will use
+            this DNS instead of the decoy IP.
         """
         data = dict(
             os=self.os,
@@ -245,46 +227,46 @@ class Decoy(Entity):
             chosen_static_ip=chosen_static_ip,
             chosen_subnet=chosen_subnet,
             chosen_gateway=chosen_gateway,
-            chosen_dns=chosen_dns
+            chosen_dns=chosen_dns,
+            dns_address=dns_address
         )
         non_empty_data = {key: value for key, value in data.iteritems() if value}
         self._update_item(non_empty_data)
 
-    def partial_update(self, name=None, chosen_static_ip=None, chosen_subnet=None, chosen_gateway=None, chosen_dns=None):
-        """
-        Change specific attributes of the decoy.
-
-        Just like the :func:`~mazerunner.api_client.Decoy.update` method, but only the given
-        attributes
-        will update.
-
-        name: Decoy name
-        chosen_static_ip: Static ip to the decoy
-        chosen_subnet: Decoy subnet mask
-        chosen_gateway: Decoy default gateway (router address)
-        chosen_dns: The DNS server the decoy will use. This is not a dns name of the decoy"""
-        data = dict(
-            name=name,
-            chosen_static_ip=chosen_static_ip,
-            chosen_subnet=chosen_subnet,
-            chosen_gateway=chosen_gateway,
-            chosen_dns=chosen_dns
-        )
-        self._partial_update_item(data)
-
     def power_on(self):
-        """Start the decoy machine"""
+        """
+        Start the decoy machine.
+        """
         self._api_client.api_request("{}{}".format(self.url, 'power_on/'), 'post')
 
+    def recreate(self):
+        """
+        Recreate the decoy machine.
+        """
+        self._api_client.api_request("{}{}".format(self.url, 'recreate/'), 'post')
+
     def power_off(self):
-        """Shutdown the decoy machine"""
+        """
+        Shut down the decoy machine.
+        """
         self._api_client.api_request("{}{}".format(self.url, 'power_off/'), 'post')
 
-    def download(self, location_with_name):
-        """Download the decoy OVA
+    def test_dns(self):
+        """
+        Check whether the decoy is properly registered in the DNS server.
+        """
+        try:
+            return self._api_client.api_request("{}{}".format(self.url, 'test_dns/'), 'post')
+        except ValidationError as e:
+            if str(e) == '{"non_field_errors":["Failed to resolve address for decoy"]}':
+                return False
+            raise
 
-        Parameters:
-            :param location_with_name: Destination path
+    def download(self, location_with_name):
+        """
+        Download the decoy. Applicable for OVA only.
+
+        :param location_with_name: Destination path.
         """
         response = self._api_client.api_request("{}{}".format(self.url, 'download/'), stream=True)
 
@@ -294,14 +276,140 @@ class Decoy(Entity):
             shutil.copyfileobj(response.raw, f)
 
 
+class DecoyCollection(EditableCollection):
+    """
+    A subset of decoys in the system.
+
+    This entity will be returned by :py:attr:`api_client.APIClient.decoys`.
+    """
+
+    MODEL_CLASS = Decoy
+
+    def create(self, os, vm_type, name, hostname, chosen_static_ip=None, chosen_subnet=None,
+               chosen_gateway=None, chosen_dns=None, chosen_interface=None, vlan=None,
+               ec2_region=None, ec2_subnet_id=None, account=None, dns_address=''):
+        """
+        Create a decoy.
+
+        :param os: OS installed on the server. Options: \
+        Ubuntu_1404, Windows_7, Windows_Server_2012, Windows_Server_2008.
+        :param vm_type: Server type. KVM for nested (recommended) or OVA for standalone.
+        :param name: Internal name of the decoy.
+        :param hostname: The decoy server name as an attacker sees it when they log in to \
+        the server.
+        :param chosen_static_ip: A static IP for the server.
+        :param chosen_subnet: Decoy subnet mask.
+        :param chosen_gateway: Decoy default gateway address.
+        :param chosen_dns: The DNS server address (This is NOT the name of the decoy).
+        :param chosen_interface: The physical interface to which the decoy should be connected. \
+        Applicable for non-promiscuous mode only.
+        :param vlan: VLAN to which the decoy will be connected (if applicable).
+        :param ec2_region: EC2 region (e.g., eu-west-1), if applicable.
+        :param ec2_subnet_id: EC2 subnet ID, if applicable.
+        :param account: EC2 account ID, if applicable.
+        :param dns_address: The DNS name of the decoy. If given, the breadcrumbs will use this \
+        DNS name instead of the decoy IP.
+        """
+        data = dict(
+            os=os,
+            vm_type=vm_type,
+            name=name,
+            hostname=hostname,
+            chosen_static_ip=chosen_static_ip,
+            chosen_subnet=chosen_subnet,
+            chosen_gateway=chosen_gateway,
+            chosen_dns=chosen_dns,
+            chosen_interface=chosen_interface,
+            vlan=vlan,
+            ec2_region=ec2_region,
+            ec2_subnet_id=ec2_subnet_id,
+            account=account,
+            dns_address=dns_address
+        )
+        non_empty_data = {key: value for key, value in data.iteritems() if value}
+        return self.create_item(non_empty_data)
+
+
+class Service(Entity):
+    """
+    This is the application that will be installed on the :class:`api_client.Decoy`, \
+    to which the attacker will be tempted to connect.
+
+    Examples of services:
+
+        * Git
+        * SSH
+        * MySQL
+        * Remote desktop
+    """
+
+    NAME = 'service'
+
+    RELATED_COLLECTIONS = {
+        'attached_decoys': Decoy,
+        'available_decoys': Decoy
+    }
+
+    def update(self, name, zip_file_path=None, **kwargs):
+        """
+        Update all of the service attributes.
+
+        :param name: Internal name for the service.
+        :param zip_file_path: A file to upload, if applicable.
+        :param kwargs: Additional relevant parameters.
+        """
+        files = {"zip_file": open(zip_file_path, 'rb')} if zip_file_path else None
+        data = dict(
+            name=name,
+            service_type=self.service_type
+        )
+        data.update(kwargs)
+        self._update_item(data, files=files)
+
+    def connect_to_decoy(self, decoy_id):
+        """
+        Connect the service to the given decoy.
+
+        :param decoy_id: The ID of the decoy to which the service should be attached.
+        """
+        data = dict(decoy_id=decoy_id)
+        self._api_client.api_request(url="{}{}".format(self.url, 'connect_to_decoy/'),
+                                     method='post',
+                                     data=data)
+        self.load()
+
+    def detach_from_decoy(self, decoy_id):
+        """
+        Detach the service from the given decoy.
+
+        :param decoy_id: Decoy ID from which the service should be detached.
+        """
+        data = dict(decoy_id=decoy_id)
+        self._api_client.api_request(url="{}{}".format(self.url, 'detach_from_decoy/'),
+                                     method='post',
+                                     data=data)
+        self.load()
+
+
 class ServiceCollection(EditableCollection):
     """
     A subset of services in the system.
 
-    This entity will be returned by :func:`~mazerunner.api_client.APIClient.services`
+    This entity will be returned by :py:attr:`api_client.APIClient.services`.
     """
+
+    MODEL_CLASS = Service
+
     def create(self, name, service_type, zip_file_path=None, **kwargs):
-        """Create a service"""
+        """
+        Create a service.
+
+        :param name: An internal name for the service.
+        :param service_type: The application you want to install. Try the params method for the \
+        available options.
+        :param zip_file_path: The path of a ZIP file to upload, if applicable.
+        :param kwargs: Additional relevant parameters.
+        """
         files = {"zip_file": open(zip_file_path, 'rb')} if zip_file_path else None
         data = dict(
             name=name,
@@ -311,122 +419,28 @@ class ServiceCollection(EditableCollection):
         return self.create_item(data, files=files)
 
 
-class Service(Entity):
-    """
-    This is the application that will be install on the :class:`~Decoy`, to which the attacker will
-    be tempted to connect.
-
-    Examples for services:
-        * Git
-        * SSH
-        * MySQL
-        * Remote desktop
-    """
-    NAME = 'service'
-
-    def _update_related_fields(self):
-        self.attached_decoys = RelatedCollection(self._api_client, Decoy, self._param_dict.get("attached_decoys", []))
-        self.available_decoys = RelatedCollection(self._api_client, Decoy, self._param_dict.get("available_decoys", []))
-
-    def update(self, name, zip_file_path=None, **kwargs):
-        """Update all the service attributes"""
-        files = {"zip_file": open(zip_file_path, 'rb')} if zip_file_path else None
-        data = dict(
-            name=name,
-            service_type=self.service_type
-        )
-        data.update(kwargs)
-        self._update_item(data, files=files)
-
-    def partial_update(self, name=None, zip_file_path=None, **kwargs):
-        """Update only the specified fields"""
-        files = {"zip_file": open(zip_file_path, 'rb')} if zip_file_path else None
-        data = dict(name=name)
-        data.update(kwargs)
-        self._partial_update_item(data, files=files)
-
-    def connect_to_decoy(self, decoy_id):
-        """
-        Connect the service to the given decoy
-
-        :param decoy_id: The id of the decoy to which the service should be attached
-        """
-        data = dict(decoy_id=decoy_id)
-        self._api_client.api_request("{}{}".format(self.url, 'connect_to_decoy/'), 'post', data=data)
-        self.load()
-
-    def detach_from_decoy(self, decoy_id):
-        """
-        Detach the service from the given decoy
-
-        :param decoy_id: Decoy id from which the service should be detached
-        """
-        data = dict(decoy_id=decoy_id)
-        self._api_client.api_request("{}{}".format(self.url, 'detach_from_decoy/'), 'post', data=data)
-        self.load()
-
-
-class DeploymentGroupCollection(EditableCollection):
-    """
-    A subset of deployment groups in the system.
-
-    This entity will be returned by :func:`~mazerunner.api_client.APIClient.deployment_groups`
-    """
-    def create(self, name, description=None):
-        """
-        Create a deployment group
-
-        :param name: Deployment group name
-        :param description: Deployment group description
-        """
-        data = dict(
-            name=name,
-            description=description
-        )
-        return self.create_item(data)
-
-    def test_deployment_credentials(self, username, password, addr, install_method, domain=None):
-        """
-
-        :param username:
-        :param password:
-        :param addr:
-        :param install_method:
-        :param domain:
-        :return: test results dict consisting of "success" flag and "reason" string when success=False
-        """
-        data = dict(
-            username=username,
-            password=password,
-            addr=addr,
-            install_method=install_method,
-            domain=domain
-        )
-        return self._api_client.api_request("{}{}".format(self._get_url(), "test_deployment_credentials/"), 'post', data=data)
-
-    def auto_deploy_groups(self, username, password, deployment_groups_ids, install_method, run_method, domain=None,
-                           deploy_on="all"):
-        data = dict(
-            username=username,
-            password=password,
-            deployment_groups_ids=deployment_groups_ids,
-            install_method=install_method,
-            run_method=run_method,
-            domain=domain,
-            deploy_on=deploy_on
-        )
-        self._api_client.api_request("{}{}".format(self._get_url(), "auto_deploy_groups/"), 'post', data=data)
-
-
 class DeploymentGroup(Entity):
+    """
+    A **deployment group** is a connection between a list of \
+    :class:`breadcrumbs <api_client.Breadcrumb>` \
+    and a list of
+    :class:`endpoints <api_client.Endpoint>` on which the breadcrumbs should be deployed.
+
+    The relationship between a breadcrumb and a deployment group is many-to-many. \n
+    The relationship between an endpoint to a deployment group is many-to-one.
+
+    When set, you can use :py:meth:`api_client.DeploymentGroup.auto_deploy` to install \
+    the deployment group's associated breadcrumbs on the deployment group's associated endpoints.
+    """
+
     NAME = 'deployment-group'
 
     def update(self, name, description):
         """
-        Update all the fields of the deployment group
+        Update all of the deployment group's fields.
 
-        :param name: Deployment group name
-        :param description: Deployment group description
+        :param name: Deployment group name.
+        :param description: Deployment group description.
         """
         data = dict(
             name=name,
@@ -436,10 +450,10 @@ class DeploymentGroup(Entity):
 
     def partial_update(self, name=None, description=None):
         """
-        Update only the specified fields
+        Update only the specified fields.
 
-        :param name: Deployment group name
-        :param description: Deployment group description
+        :param name: Deployment group name.
+        :param description: Deployment group description.
         """
         data = dict(
             name=name,
@@ -452,21 +466,22 @@ class DeploymentGroup(Entity):
         Check whether this deployment group contains two or more conflicting breadcrumbs.
 
         A conflict will happen, for example, when two breadcrumbs of the same type use the
-        same username
+        same username.
 
-        :param os: OS type (Windows/Linux)
+        :param os: OS type (Windows/Linux).
         """
         query_dict = dict(os=os)
-        return self._api_client.api_request("{}{}".format(self.url, 'check_conflicts/'), query_params=query_dict)
+        return self._api_client.api_request(url="{}{}".format(self.url, 'check_conflicts/'),
+                                            query_params=query_dict)
 
     def deploy(self, location_with_name, os, download_type, download_format="ZIP"):
         """
-        Download an installer of this deployment group
+        Download this deployment group's installer/uninstaller.
 
-        :param location_with_name: Local destination path
-        :param os: OS for which the installation is intended
-        :param download_type: Installation action (install/uninstall)
-        :param download_format: Installer format (ZIP/MSI/EXE)
+        :param location_with_name: Local destination path.
+        :param os: OS for which the installation is intended.
+        :param download_type: Installation action (install/uninstall).
+        :param download_format: Installer format (ZIP/MSI/EXE).
         """
         query_dict = dict(os=os, download_type=download_type, download_format=download_format)
         response = self._api_client.api_request(
@@ -478,7 +493,22 @@ class DeploymentGroup(Entity):
             response.raw.decode_content = True
             shutil.copyfileobj(response.raw, f)
 
-    def auto_deploy(self, username, password, install_method, run_method, domain=None, deploy_on="all"):
+    def auto_deploy(self, install_method, run_method, username, password, domain='',
+                    deploy_on="all"):
+        """
+        Deploy all the breadcrumbs that are members of this deployment group on all the endpoints
+        that are assigned to this deployment group.
+
+        :param install_method: The format of the installation file: EXE_DEPLOY or CMD_DEPLOY.
+        :param run_method: Currently only PS_EXEC is supported.
+        :param username: A Windows username, which MazeRunner will use to authenticate itself for \
+        installing on the endpoint.
+        :param password: The password for that user.
+        :param domain: The domain of that user. Pass an empty string for a local user.
+        :param deploy_on: Options are: "all" for all endpoints assigned to this group, \
+        or "failed" if you only want to deploy on the endpoints where no previous successful \
+        deployment has taken place.
+        """
         data = dict(
             username=username,
             password=password,
@@ -490,57 +520,147 @@ class DeploymentGroup(Entity):
         self._api_client.api_request("{}{}".format(self.url, 'auto_deploy/'), 'post', data=data)
 
 
-class BreadcrumbCollection(EditableCollection):
+class DeploymentGroupCollection(EditableCollection):
     """
-    A subset of breadcrumbs in the system.
+    A subset of deployment groups in the system.
 
-    This entity will be returned by :func:`~mazerunner.api_client.APIClient.breadcrumbs`
+    This entity will be returned by :py:attr:`api_client.APIClient.deployment_groups`.
     """
-    def create(self, name, breadcrumb_type, **kwargs):
+
+    MODEL_CLASS = DeploymentGroup
+
+    def create(self, name, description=None):
+        """
+        Create a deployment group.
+
+        :param name: Deployment group name.
+        :param description: Deployment group description.
+        """
         data = dict(
             name=name,
-            breadcrumb_type=breadcrumb_type
+            description=description
         )
-        data.update(kwargs)
         return self.create_item(data)
+
+    def test_deployment_credentials(self, addr, install_method, username, password, domain=None):
+        """
+        Check your credentials on a specific endpoint, without actually installing anything on it.
+        Useful before performing a large-scale deployment using the auto_deploy or
+        auto_deploy_groups.
+
+        :param addr: The IP of the tested endpoint.
+        :param install_method: Use here the same install_method you're planning to use in \
+        auto_deploy or auto_deploy_groups.
+        :param username: The Windows user you want MazeRunner to use when connecting to the endpoint.
+        :param password: The password of that user.
+        :param domain: The domain of that user. Leave as an empty string for local user.
+        :return: Test results dict consisting of a "success" key. In case of failure, \
+        a "reason" key will appear as well.
+        """
+        data = dict(
+            username=username,
+            password=password,
+            addr=addr,
+            install_method=install_method,
+            domain=domain
+        )
+        return self._api_client.api_request(url="{}{}".format(self._get_url(),
+                                                              "test_deployment_credentials/"),
+                                            method='post', data=data)
+
+    def auto_deploy_groups(self, deployment_groups_ids, install_method, run_method,
+                           username, password, domain=None, deploy_on="all"):
+        """
+        For each of the specified deployment_groups_ids, deploy all its member breadcrumbs on all
+        the endpoints associated with it.
+
+        :param deployment_groups_ids: A list of the desired deployment group IDs.
+        :param install_method: The format of the installation file: EXE_DEPLOY or CMD_DEPLOY.
+        :param run_method: Currently, only PS_EXEC is supported.
+        :param username: A Windows username, which MazeRunner will use to authenticate itself for \
+        installing on the endpoint.
+        :param password: The password for that user.
+        :param domain: The domain of that user. Pass an empty string for a local user.
+        :param deploy_on: Options are: "all" for all endpoints assigned to this group, \
+        or "failed" if you only want to deploy on the endpoints where no previous successful \
+        deployment has taken place.
+        """
+        data = dict(
+            username=username,
+            password=password,
+            deployment_groups_ids=deployment_groups_ids,
+            install_method=install_method,
+            run_method=run_method,
+            domain=domain,
+            deploy_on=deploy_on
+        )
+        self._api_client.api_request(url="{}{}".format(self._get_url(), "auto_deploy_groups/"),
+                                     method='post',
+                                     data=data)
+
+    def deploy_all(self, location_with_name, os, download_format="ZIP"):
+        """
+        Download this deployment group's installers & uninstallers.
+
+        :param location_with_name: Local destination path.
+        :param os: OS for which the installation is intended.
+        :param download_format: Installer format (ZIP/MSI/EXE).
+        """
+        query_dict = dict(os=os, download_format=download_format)
+        response = self._api_client.api_request(
+            url="{}{}".format(self._get_url(), 'deploy_all/'),
+            query_params=query_dict,
+            stream=True)
+
+        file_path = "{}.{}".format(location_with_name, download_format.lower())
+        with open(file_path, 'wb') as f:
+            response.raw.decode_content = True
+            shutil.copyfileobj(response.raw, f)
+
+    def params(self):
+        raise NotImplementedError
 
 
 class Breadcrumb(Entity):
     """
-    A breadcrumb is the connection info to a service on a decoy, and the way it's stored on the
-    computer.
+    A breadcrumb consists of connection credentials deployed on an endpoint. An attacker will find
+    and use these credentials to connect to a service on a decoy.
 
-    In order to tempt the attacker to connect to our :class:`~Service` that is installed on our
-    :class:`~Decoy`, we first need to create a key for connecting to it.
+    In order to tempt the attacker to connect to our :class:`api_client.Service` that \
+     is installed on our :class:`api_client.Decoy`, we first need to create a key \
+     for connecting to it.
 
-    Then, we'll take the key and deploy it to the organization endpoints, and wait
+    Then, we will take the key and deploy it to the organization's endpoints, and wait
     for the attacker to find and use it.
 
     Therefore, the breadcrumb is comprised of two elements:
-        - The keys using which the attacker will connect to the decoy
-        - The way the breadcrumb will be put on the endpoint
 
-    Examples for breadcrumbs:
-        - A command of connection to mysql with user & password, stored in the history file of the
-            endpoint
-        - A user, password, and path of a network share, mounted on the endpoint
-        - A cookie with a session token, stored in the browser on the endpoint
+        - The keys the attacker will use to connect to the decoy.
+        - Where the breadcrumb will be deployed to on the endpoint.
+
+    Examples of breadcrumbs:
+
+        - A command for connecting to MySQL with user & password, stored in the endpoint's history file.
+        - A user, password, and path of a network share, mounted on the endpoint.
+        - A cookie with a session token, stored in the endpoint's browser.
     """
+
     NAME = 'breadcrumb'
 
-    def _update_related_fields(self):
-        self.attached_services = RelatedCollection(
-            self._api_client, Service,
-            self._param_dict.get("attached_services", []))
-        self.available_services = RelatedCollection(
-            self._api_client, Service,
-            self._param_dict.get("available_services", []))
-        self.deployment_groups = RelatedCollection(
-            self._api_client, DeploymentGroup,
-            self._param_dict.get("deployment_groups", []))
+    RELATED_COLLECTIONS = {
+        'attached_services': Service,
+        'available_services': Service,
+        'deployment_groups': DeploymentGroup
+    }
 
     def update(self, name, **kwargs):
-        """Update breadcrumb configuration"""
+        """
+        Update breadcrumb configuration.
+
+        :param name: An internal name for the breadcrumb.
+        :param kwargs: Additional parameters for that breadcrumb. See the params method for \
+        information about the options.
+        """
         data = dict(
             name=name,
             breadcrumb_type=self.breadcrumb_type
@@ -548,39 +668,38 @@ class Breadcrumb(Entity):
         data.update(kwargs)
         self._update_item(data)
 
-    def partial_update(self, name=None, **kwargs):
-        """Update specific fields in the breadcrumb. All unspecified fields will not be changed."""
-        data = dict(name=name)
-        data.update(kwargs)
-        self._partial_update_item(data)
-
     def connect_to_service(self, service_id):
         """
-        Connect breadcrumb to a service
+        Connect the breadcrumb to a service.
 
-        :param service_id: The service id to which the breadcrumb should be attached
+        :param service_id: The service ID to which the breadcrumb should be attached.
         """
         data = dict(service_id=service_id)
-        self._api_client.api_request("{}{}".format(self.url, 'connect_to_service/'), 'post', data=data)
+        self._api_client.api_request(url="{}{}".format(self.url, 'connect_to_service/'),
+                                     method='post',
+                                     data=data)
         self.load()
 
     def detach_from_service(self, service_id):
         """
-        Detach the breadcrumb from the given service
-        :param service_id: Service id from which the breadcrumbs whould be detached
+        Detach the breadcrumb from a service.
+
+        :param service_id: Service ID from which the breadcrumbs should be detached.
         """
         data = dict(service_id=service_id)
-        self._api_client.api_request("{}{}".format(self.url, 'detach_from_service/'), 'post', data=data)
+        self._api_client.api_request(url="{}{}".format(self.url, 'detach_from_service/'),
+                                     method='post',
+                                     data=data)
         self.load()
 
     def deploy(self, location_with_name, os, download_type, download_format="ZIP"):
         """
-        Generate a breadcrumb and download it
+        Generate a breadcrumb and download it.
 
-        :param location_with_name: Local destination path for the breadcrumb
-        :param os: OS to which the breadcrumb installation is targeted (Windows/Linux)
-        :param download_type: Installation action (install/uninstall)
-        :param download_format: Installer format (ZIP/EXE/MSI)
+        :param location_with_name: Local destination path for the breadcrumb.
+        :param os: OS to which the breadcrumb installation is targeted (Windows/Linux).
+        :param download_type: Installation action (install/uninstall).
+        :param download_format: Installer format (ZIP/EXE/MSI).
         """
         query_dict = dict(os=os, download_type=download_type, download_format=download_format)
         response = self._api_client.api_request(
@@ -594,33 +713,151 @@ class Breadcrumb(Entity):
 
     def add_to_group(self, deployment_group_id):
         """
-        Add the breadcrumb to the given deployment group
+        Add the breadcrumb to the given deployment group.
 
-        :param deployment_group_id: Deployment group id to which the breadcrumb should be added
+        :param deployment_group_id: Deployment group ID to which the breadcrumb should be added.
         """
+
+        if not isinstance(deployment_group_id, Number):
+            raise BadParamError('deployment_group_id must be a number')
+
         data = dict(deployment_group_id=deployment_group_id)
         self._api_client.api_request("{}{}".format(self.url, 'add_to_group/'), 'post', data=data)
         self.load()
 
     def remove_from_group(self, deployment_group_id):
         """
-        Remove the breadcrumb from the given deployment group
+        Remove the breadcrumb from the given deployment group.
 
-        :param deployment_group_id: Deployment group id from which the breadcrumb should be removed
+        :param deployment_group_id: Deployment group ID from which the breadcrumb should be removed.
         """
         data = dict(deployment_group_id=deployment_group_id)
-        self._api_client.api_request("{}{}".format(self.url, 'remove_from_group/'), 'post', data=data)
+        self._api_client.api_request(url="{}{}".format(self.url, 'remove_from_group/'),
+                                     method='post',
+                                     data=data)
         self.load()
+
+
+class BreadcrumbCollection(EditableCollection):
+    """
+    A subset of breadcrumbs in the system.
+
+    This entity will be returned by :py:attr:`api_client.APIClient.breadcrumbs`.
+    """
+
+    MODEL_CLASS = Breadcrumb
+
+    def create(self, name, breadcrumb_type, **kwargs):
+        """
+        Create a new breadcrumb.
+
+        :param name: An internal name for the breadcrumb.
+        :param breadcrumb_type: The type of breadcrumb. See options for a list \
+        of available breadcrumb types.
+        :param kwargs: Other parameters relevant for the desired breadcrumb type. See options \
+        for more information.
+        """
+        data = dict(
+            name=name,
+            breadcrumb_type=breadcrumb_type
+        )
+        data.update(kwargs)
+        return self.create_item(data)
+
+
+class Alert(BaseEntity):
+    """
+    An alert is automatically generated by the system every time an attacker interacts with the
+    decoy.
+
+    The alert contains the information of a detected attack: which code was executed,
+    which query was run on the DB, which SMB shares were accessed, etc.
+    """
+
+    NAME = 'alert'
+
+    def delete(self):
+        """
+        Delete the alert
+        """
+        self._api_client.api_request(self.url, 'delete')
+
+    def download_image_file(self, location_with_name):
+        """
+        Download the image file of the executed code.
+
+        :param location_with_name: Download destination path.
+        """
+        response = self._api_client.api_request(url="{}{}".format(self.url, 'download_image_file/'),
+                                                stream=True)
+
+        file_path = "{}.bin".format(location_with_name)
+        with open(file_path, 'wb') as f:
+            response.raw.decode_content = True
+            shutil.copyfileobj(response.raw, f)
+
+    def download_memory_dump_file(self, location_with_name):
+        """
+        Download memory dump of the executed code.
+
+        :param location_with_name: Download destination path.
+        """
+        response = self._api_client.api_request(url="{}{}".format(self.url,
+                                                                  'download_memory_dump_file/'),
+                                                stream=True)
+
+        file_path = "{}.bin".format(location_with_name)
+        with open(file_path, 'wb') as f:
+            response.raw.decode_content = True
+            shutil.copyfileobj(response.raw, f)
+
+    def download_network_capture_file(self, location_with_name):
+        """
+        Download alert info in pcap format.
+
+        :param location_with_name: Download destination path.
+        """
+        response = self._api_client.api_request(url="{}{}".format(self.url,
+                                                                  'download_network_capture_file/'),
+                                                stream=True)
+
+        file_path = "{}.pcap".format(location_with_name)
+        with open(file_path, 'wb') as f:
+            response.raw.decode_content = True
+            shutil.copyfileobj(response.raw, f)
+
+    def download_stix_file(self, location_with_name):
+        """
+        Download alert info in STIX format.
+
+        :param location_with_name: Download destination path.
+        """
+        response = self._api_client.api_request(url="{}{}".format(self.url, 'download_stix_file/'),
+                                                stream=True)
+
+        file_path = "{}.xml".format(location_with_name)
+        with open(file_path, 'wb') as f:
+            response.raw.decode_content = True
+            shutil.copyfileobj(response.raw, f)
 
 
 class AlertCollection(Collection):
     """
-    A subset of the alerts in the system
+    A subset of the alerts in the system.
 
-    This entity will be returned by :func:`~mazerunner.api_client.APIClient.alerts`
+    This entity will be returned by :py:attr:`api_client.APIClient.alerts`.
     """
-    def __init__(self, api_client, obj_class, filter_enabled=False, only_alerts=False, alert_types=None):
-        super(AlertCollection, self).__init__(api_client, obj_class)
+
+    MODEL_CLASS = Alert
+
+    def __init__(self, api_client, filter_enabled=False, only_alerts=False, alert_types=None):
+        """
+        :param api_client: The connection instance.
+        :param filter_enabled: Whether this is a filtered collection.
+        :param only_alerts: Filter out alerts in status 'Ignore' and 'Mute'.
+        :param alert_types: E.g., code, HTTP, etc. See params() for the full list.
+        """
+        super(AlertCollection, self).__init__(api_client)
         self.filter_enabled = filter_enabled
         self.only_alerts = only_alerts
         self.alert_types = alert_types
@@ -632,25 +869,27 @@ class AlertCollection(Collection):
 
     def filter(self, filter_enabled=False, only_alerts=False, alert_types=None):
         """
-        Get alerts by query
+        Get alerts by query.
 
         :param filter_enabled: When False, the only_alerts and alert_types params will be ignored.
-        :param only_alerts: Take only alerts in 'Alert' status (and exclude the 'mute' and 'ignore')
-        :param alert_types: A list of alert types
-        :return: A filtered AlertCollection
+        :param only_alerts: Only take alerts in 'Alert' status (exclude those in 'Mute' and \
+        'Ignore' status).
+        :param alert_types: A list of alert types.
+        :return: A filtered :class:`api_client.AlertCollection`.
         """
         formatted_alert_types = " ".join(alert_types) if alert_types else ""
-        return AlertCollection(self._api_client, Alert, filter_enabled=filter_enabled, only_alerts=only_alerts,
-                               alert_types=formatted_alert_types)
+        return AlertCollection(self._api_client, filter_enabled=filter_enabled,
+                               only_alerts=only_alerts, alert_types=formatted_alert_types)
 
     def export(self, location_with_name):
         """
-        Export all alerts to CSV
+        Export all alerts to CSV.
 
-        :param location_with_name: Download destination file
+        :param location_with_name: Download destination file.
         """
         query_params = self._get_query_params()
-        response = self._api_client.api_request("{}{}".format(self._get_url(), 'export/'), stream=True,
+        response = self._api_client.api_request(url="{}{}".format(self._get_url(), 'export/'),
+                                                stream=True,
                                                 query_params=query_params)
 
         file_path = "{}.csv".format(location_with_name)
@@ -660,14 +899,13 @@ class AlertCollection(Collection):
 
     def delete(self, selected_alert_ids=None, delete_all_filtered=False):
         """
-        Delete alerts by ids list
+        Delete alerts by ID list or by filter.
 
-        Parameters:
-            :param selected_alert_ids: List of alerts to be deleted
-            :param delete_all_filtered: Delete alerts by query, rather than by ids list. See \
-            example below
+        :param selected_alert_ids: List of alerts to be deleted.
+        :param delete_all_filtered: Delete alerts by query, rather than by ID list. See \
+        example below.
 
-        Example 1: Delete alerts by id::
+        Example 1: Delete alerts by ID list::
 
             client = mazerunner.connect(...)
             all_alerts = client.alerts.filter()
@@ -682,99 +920,82 @@ class AlertCollection(Collection):
         data = dict(selected_alert_ids=selected_alert_ids,
                     delete_all_filtered=delete_all_filtered)
         query_params = self._get_query_params()
-        self._api_client.api_request("{}{}".format(self._get_url(), 'delete_selected/'), 'post', data=data,
+        self._api_client.api_request(url="{}{}".format(self._get_url(), 'delete_selected/'),
+                                     method='post',
+                                     data=data,
                                      query_params=query_params)
 
 
-class Alert(BaseEntity):
+class Endpoint(Entity):
     """
-    An alert is automatically generated by the system every time an attacker interacts with the
-    decoy.
+    An endpoint represents a single workstation in the organization, and the status
+    of the breadcrumbs' deployment on it.
+    """
 
-    The alert contains the information of a detected attack: what code was executed,
-    what query was run on the DB, what SMB shares were accessed, etc.
-    """
-    NAME = 'alert'
+    NAME = 'endpoint'
 
     def delete(self):
-        """Delete the alert"""
-        self._api_client.api_request(self.url, 'delete')
-
-    def download_image_file(self, location_with_name):
         """
-        Download image file of the executed code
-
-        :param location_with_name: Download destination path
+        Delete the endpoint.
         """
-        response = self._api_client.api_request("{}{}".format(self.url, 'download_image_file/'), stream=True)
+        base_url = self._api_client.api_urls[self.NAME]
+        url = '%sdelete_selected/?filter_enabled=true' % base_url
+        data = {"selected_endpoints_ids": [self.id]}
+        self._api_client.api_request(url, 'post', data=data)
 
-        file_path = "{}.bin".format(location_with_name)
-        with open(file_path, 'wb') as f:
-            response.raw.decode_content = True
-            shutil.copyfileobj(response.raw, f)
-
-    def download_memory_dump_file(self, location_with_name):
-        """
-        Download memory dump of the executed code
-
-        :param location_with_name: Download destination path
-        """
-        response = self._api_client.api_request("{}{}".format(self.url, 'download_memory_dump_file/'), stream=True)
-
-        file_path = "{}.bin".format(location_with_name)
-        with open(file_path, 'wb') as f:
-            response.raw.decode_content = True
-            shutil.copyfileobj(response.raw, f)
-
-    def download_network_capture_file(self, location_with_name):
-        """
-        Download alert info in pcap format
-
-        :param location_with_name: Download destination path
-        """
-        response = self._api_client.api_request("{}{}".format(self.url, 'download_network_capture_file/'), stream=True)
-
-        file_path = "{}.pcap".format(location_with_name)
-        with open(file_path, 'wb') as f:
-            response.raw.decode_content = True
-            shutil.copyfileobj(response.raw, f)
-
-    def download_stix_file(self, location_with_name):
-        """
-        Download alert info in stix format
-
-        :param location_with_name: Download destination path
-        """
-        response = self._api_client.api_request("{}{}".format(self.url, 'download_stix_file/'), stream=True)
-
-        file_path = "{}.xml".format(location_with_name)
-        with open(file_path, 'wb') as f:
-            response.raw.decode_content = True
-            shutil.copyfileobj(response.raw, f)
 
 class EndpointCollection(Collection):
     """
-    A subset of the endpoints in the system
+    A subset of the endpoints in the system.
 
-    This entity will be returned by :func:`~mazerunner.api_client.APIClient.endpoints`
+    This entity will be returned by :py:attr:`api_client.APIClient.endpoints`.
     """
-    def __init__(self, api_client, obj_class, filter_enabled=False, keywords=""):
-        super(EndpointCollection, self).__init__(api_client, obj_class)
+
+    MODEL_CLASS = Endpoint
+
+    RUN_METHOD_FOR_INSTALL_METHOD = {
+        'ZIP': 'CMD_DEPLOY',
+        'EXE': 'EXE_DEPLOY',
+        'MSI': 'EXE_DEPLOY'
+    }
+
+    def __init__(self,
+                 api_client,
+                 filter_enabled=False,
+                 keywords='',
+                 statuses=None,
+                 deploy_groups=None):
+        """
+        :param api_client: The connection instance.
+        :param filter_enabled: Whether this collection is filtered.
+        :param keywords: Keywords by which this collection is filtered.
+        :param statuses: A whitelist of the endpoint statuses by which you want to filter.
+        :param deploy_groups: A whitelist of the deployment group IDs by which you want to filter.
+        """
+        super(EndpointCollection, self).__init__(api_client)
         self.filter_enabled = filter_enabled
         self.keywords = keywords
+        self.statuses = statuses
+        self.deploy_groups = deploy_groups
 
     def _get_query_params(self):
-        return dict(filter_enabled=self.filter_enabled,
-                    keywords=self.keywords)
+        return {
+            'filter_enabled': self.filter_enabled,
+            'keywords': self.keywords,
+            'statuses': self.statuses,
+            'deploy_groups': self.deploy_groups
+        }
 
     def filter(self, keywords=""):
         """
-        Get endpoints by query
+        Get endpoints by query.
 
-        :param keywords: Search keywords
-        :return: A filtered EndpointCollection
+        :param keywords: Search keywords.
+        :return: A filtered :class:`api_client.EndpointCollection`.
         """
-        return EndpointCollection(self._api_client, Endpoint, filter_enabled=True, keywords=keywords)
+        return EndpointCollection(api_client=self._api_client,
+                                  filter_enabled=True,
+                                  keywords=keywords)
 
     def reassign_to_group(self, deployment_group, endpoints):
         """
@@ -792,20 +1013,141 @@ class EndpointCollection(Collection):
             method='POST',
             data=data)
 
-class Endpoint(Entity):
-    """
-    Endpoint entity
-    """
-    NAME = 'endpoint'
+    def _get_run_method(self, install_method):
+        if install_method not in self.RUN_METHOD_FOR_INSTALL_METHOD:
+            raise InvalidInstallMethodError('Invalid install method: %s' % install_method)
+        return self.RUN_METHOD_FOR_INSTALL_METHOD[install_method.upper()]
 
-    def delete(self):
-        """Delete the endpoint"""
-        self._api_client.api_request(self.url, 'delete')
+    def clean_filtered(self,
+                       install_method,
+                       username,
+                       password,
+                       domain=''):
+        """
+        Uninstall breadcrumbs from all of the endpoints matching the filter.
+
+        :param install_method: Uninstaller format (EXE/MSI/ZIP).
+        :param username: Local or domain username. MazeRunner will use this to access the endpoint.
+        :param password: Password for that user.
+        :param domain: The domain where that user is registered. Leave blank for local user.
+        """
+
+        self._api_client.api_request(url='{}{}'.format(self._get_url(), 'clean_selected/'),
+                                     method='POST',
+                                     query_params=self._get_query_params(),
+                                     data={
+                                         'clean_all_filtered': True,
+                                         'username': username,
+                                         'password': password,
+                                         'domain': domain,
+                                         'run_method': self._get_run_method(install_method),
+                                         'install_method': install_method
+                                     })
+
+    def clean_by_endpoints_ids(self,
+                               endpoints_ids,
+                               install_method,
+                               username,
+                               password,
+                               domain=''):
+        """
+        Uninstall breadcrumbs from all of the specified endpoint IDs.
+
+        :param endpoints_ids: List of IDs of the endpoints from which we want to remove breadcrumbs.
+        :param install_method: Uninstaller format (EXE/MSI/ZIP).
+        :param username: Local or domain username. MazeRunner will use this to access the endpoint.
+        :param password: Password for that user.
+        :param domain: The domain where that user is registered. Leave blank for local user.
+        """
+        self._api_client.api_request(url='{}{}'.format(self._get_url(), 'clean_selected/'),
+                                     method='POST',
+                                     data={
+                                         'selected_endpoints_ids': endpoints_ids,
+                                         'username': username,
+                                         'password': password,
+                                         'domain': domain,
+                                         'run_method': self._get_run_method(install_method),
+                                         'install_method': install_method
+                                     })
+
+    def delete_filtered(self):
+        """
+        Delete all the endpoints matching the filter.
+        """
+        self._api_client.api_request(url='{}{}'.format(self._get_url(), 'delete_selected/'),
+                                     method='POST',
+                                     query_params=self._get_query_params(),
+                                     data={
+                                         'delete_all_filtered': True
+                                     })
+
+    def delete_by_endpoints_ids(self, endpoints_ids):
+        """
+        Delete all the endpoints in the list.
+
+        :param endpoints_ids: List of the endpoint IDs to be deleted.
+        """
+        self._api_client.api_request(url='{}{}'.format(self._get_url(), 'delete_selected/'),
+                                     method='POST',
+                                     data={
+                                         'selected_endpoints_ids': endpoints_ids,
+                                     })
+
+    def export_filtered(self):
+        """
+        Export all filtered endpoints to CSV.
+        """
+        return self._api_client.api_request(url='{}{}'.format(self._get_url(), 'export/'),
+                                            query_params=self._get_query_params(),
+                                            expect_json_response=False)
+
+    def filter_data(self):
+        """
+        Get the available values for the endpoint filters.
+        """
+        return self._api_client.api_request(url='{}{}'.format(self._get_url(), 'filter_data/'))
+
+    def status_dashboard(self):
+        """
+        Get a list of all endpoints and their statuses.
+        """
+        return self._api_client.api_request(url='{}{}'.format(self._get_url(), 'status_dashboard/'))
+
+    def params(self):
+        raise NotImplementedError
+
+
+class BackgroundTask(BaseEntity):
+    """
+    A background task represents the progress of a request that is not accomplished immediately, due
+    to its potential to take a long time to process.
+    Examples of requests that create background tasks include deployment on endpoints, and importing
+    the organization structure from Active Directory.
+    """
+    NAME = 'background-task'
+
+    def stop(self):
+        """
+        Stop task.
+        """
+        self._api_client.api_request("{}{}".format(self.url, 'stop/'), 'post')
 
 
 class BackgroundTaskCollection(Collection):
-    def __init__(self, api_client, obj_class, running=True):
-        super(BackgroundTaskCollection, self).__init__(api_client, obj_class)
+    """
+    A subset of background tasks in the system.
+
+    This entity will be returned by :py:attr:`api_client.APIClient.background_tasks`.
+    """
+
+    MODEL_CLASS = BackgroundTask
+
+    def __init__(self, api_client, running=True):
+        """
+        :param api_client: The connection instance.
+        :param running: If True, shows running tasks. Otherwise, shows completed tasks.
+        """
+        super(BackgroundTaskCollection, self).__init__(api_client)
         self.running = running
 
     def _get_query_params(self):
@@ -813,145 +1155,212 @@ class BackgroundTaskCollection(Collection):
 
     def filter(self, running=True):
         """
-        Get background tasks by query
+        Get background tasks by query.
 
-        :param running: When True, running and paused tasks returned. When False, returns completed tasks.
-        :return: A filtered BackgroundTaskCollection
+        :param running: When True, running and paused tasks are returned. When False, stopped and \
+        completed tasks are returned.
+        :return: A filtered :class:`api_client.BackgroundTaskCollection`.
         """
-        return BackgroundTaskCollection(self._api_client, BackgroundTask, running=running)
+        return BackgroundTaskCollection(self._api_client, running=running)
 
     def acknowledge_all_complete(self):
-        """Acknowledge all complete (stopped/finished) tasks"""
+        """
+        Acknowledge all tasks with the status 'stopped' or 'complete'.
+        """
         self._api_client.api_request("{}{}".format(self._get_url(), 'acknowledge_all/'), 'post')
 
-
-class BackgroundTask(BaseEntity):
-    NAME = 'background-task'
-
-    def acknowledge(self):
-        """
-        Acknowledge task
-        """
-        response = self._api_client.api_request("{}{}".format(self.url, 'acknowledge/'), 'post')
-        self._update_entity_data(response)
-
-    def stop(self):
-        """
-        Stop task
-        """
-        response = self._api_client.api_request("{}{}".format(self.url, 'stop/'), 'post')
-        self._update_entity_data(response)
-
-
-class AlertPolicyCollection(Collection):
-    def reset_all_to_default(self):
-        """
-        Reset the 'to_status' of all alert policies back to their defaults
-        """
-        self._api_client.api_request("{}{}".format(self._get_url(), 'reset_all/'), 'post')
+    def params(self):
+        raise NotImplementedError
 
 
 class AlertPolicy(BaseEntity):
+    """
+    An alert policy (aka "system-wide rule") is a configuration defining the severity of each
+    alert type. The options are:
+
+    - 0 = Ignore
+    - 1 = Mute
+    - 2 = Alert
+    """
     NAME = 'alert-policy'
 
     def update_to_status(self, to_status):
         """
-        Update the 'to_status' of the policy
+        Update the desired alert level of the given alert type.
 
-        :param to_status: The name of the new 'to_status' of the policy
+        :param to_status: The name of the new 'to_status' of the policy.
         """
         data = dict(to_status=to_status)
         response = self._api_client.api_request(self.url, 'put', data=data)
         self._update_entity_data(response)
 
 
-class AlertRuleCollection(EditableCollection):
-    def create(self, **kwargs):
-        """Create an alert rule"""
-        return self.create_item(kwargs)
-
-
-class AlertRule(Entity):
-    NAME = 'alert-rule'
-
-    def _update_related_fields(self):
-        decoy_param = self._param_dict.get("decoy", None)
-        if decoy_param:
-            self.decoy = Decoy(self._api_client, decoy_param)
-        service_param = self._param_dict.get("service", None)
-        if service_param:
-            self.service = Service(self._api_client, service_param)
-
-    def update(self, decoy, service, originating_ip, filename, alert_type, to_status):
-        """Update all the alert rule attributes"""
-        data = dict(
-            decoy=decoy,
-            service=service,
-            originating_ip=originating_ip,
-            filename=filename,
-            alert_type=alert_type,
-            to_status=to_status
-        )
-        self._update_item(data)
-
-    def partial_update(self, **kwargs):
-        """Update only specified alert rule attributes"""
-        self._partial_update_item(kwargs)
-
-
-class ActiveSocEventRegistration(Entity):
+class AlertPolicyCollection(Collection):
     """
-    Active Soc API For create ActiveSoc Alerts
-    Those alerts will pass to filter on all relevant rules
+    A subset of the alert policies (aka system-wide rules) in the system.
+
+    This entity will be returned by :py:attr:`api_client.APIClient.alert_policies`.
     """
+    MODEL_CLASS = AlertPolicy
+
+    def __len__(self):
+        query_params = self._get_query_params()
+        response = self._api_client.api_request(self._get_url(), query_params=query_params)
+        return len(response)
+
+    def __iter__(self):
+        query_params = self._get_query_params()
+        response = self._api_client.api_request(self._get_url(), query_params=query_params)
+        for item_data in response:
+            yield self._obj_class(self._api_client, item_data)
+
+    def reset_all_to_default(self):
+        """
+        Reset the 'to_status' of all alert policies to their original system default.
+        """
+        self._api_client.api_request("{}{}".format(self._get_url(), 'reset_all/'), 'post')
+
+
+class CIDRMapping(BaseEntity):
+    """
+    This represents a CIDR block and (optional) a deployment group with which it should be
+    associated. The daily CIDR block importer, if enabled, will scan daily all of the endpoints
+    in the CIDR mapping range, and will create an endpoint entity for any IP in that range that
+    has a reverse DNS record or an NBNS name. If a deployment group was configured for that CIDR
+    mapping, the daily CIDR block importer will also assign that deployment
+    group to endpoints that were just imported or did not have one configured.
+    """
+    NAME = 'cidr-mapping'
+
+    def generate_endpoints(self):
+        """
+        Scan the CIDR block and import the endpoints.
+        """
+        return self._api_client.api_request('{}{}'.format(self.url, 'generate_endpoints/'),
+                                            method='post',
+                                            data={
+                                                'reassign': False
+                                            })
+
+    def delete(self):
+        """
+        Delete this record.
+        """
+        self._api_client.api_request(self.url, 'delete')
+
+
+class CIDRMappingCollection(UnpaginatedEditableCollection):
+    """
+    A subset of the CIDR mappings in the system.
+
+    This entity will be returned by :py:attr:`api_client.APIClient.cidr_mappings`.
+    """
+    MODEL_CLASS = CIDRMapping
+
+    def create(self, cidr_block, deployment_group, comments, active):
+        """
+        Create a new CIDR mapping.
+
+        :param cidr_block: The CIDR block from which the endpoints should be imported. E.g., \
+        192.168.0.1/24.
+        :param deployment_group: Optional. If specified, this deployment group will be assigned \
+        to newly imported endpoints and endpoints that were previously unassigned.
+        :param comments: Optional. Comments about the CIDR block.
+        :param active: Whether this block should be included in the import.
+        """
+        return self.create_item({
+            'cidr_block': cidr_block,
+            'deployment_group': deployment_group,
+            'comments': comments,
+            'active': active
+        })
+
+    def generate_all_endpoints(self):
+        """
+        Scan all the active CIDR blocks in the system and import all of their endpoints.
+        """
+        return self._api_client.api_request('{}{}'.format(self._get_url(),
+                                                          'generate_all_endpoints/'),
+                                            method='post',
+                                            data={
+                                                'reassign': False
+                                            })
+
+    def params(self):
+        raise NotImplementedError
+
+
+class ActiveSOCEvent(Entity):
+    """
+    A message to be sent to a SOC interface.
+    """
+
     NAME = 'api-soc'
 
 
-class ActiveSocEventRegistrationCollection(EditableCollection):
+class ActiveSOCEventCollection(EditableCollection):
+    """
+    Use this when you want to use MazeRunner's ActiveSOC or Responder features, but the SOC
+    application that you use is not supported by the built-in MazeRunner integration.
+    In order to use these features, first create a SOC interface of the type "SOC via MazeRunner API",
+    give it a name, and then send events to that name.
+    """
+
+    MODEL_CLASS = ActiveSOCEvent
+
     def create(self, soc_name, event_dict):
         """
-        Register single event into Active Soc
-        """
-        return self.create_multiple_registrations(soc_name, [event_dict])
+        Submit a single event to the SOC interface.
 
-    def create_multiple_registrations(self, soc_name, event_dicts):
+        :param soc_name: The name of the SOC interface as configured on the SOC screen in \
+        MazeRunner.
+        :param event_dict: An event dict to be sent.
         """
-         register multiple events into Active Soc
+        return self.create_multiple_events(soc_name, [event_dict])
+
+    def create_multiple_events(self, soc_name, events_dicts):
+        """
+        Submit multiple events to the SOC interface.
+
+        :param soc_name: The name of the SOC interface as configured on the SOC screen in \
+        MazeRunner.
+        :param events_dicts: A list of event dicts to be sent.
         """
 
         data = dict(
             source=soc_name,
-            data=event_dicts
+            data=events_dicts
         )
         self._api_client.api_request(self._get_url(), 'post', data=data)
+
+    def params(self):
+        raise NotImplementedError
+
+    def create_item(self, data, files=None):
+        raise NotImplementedError
+
+    def get_item(self, id):
+        raise NotImplementedError
 
 
 class APIClient(object):
     """
-    This is the starting point for any interaction with MazeRunner
+    This is the starting point for any interaction with MazeRunner.
 
-    Parameters:
-        :param host: The hostname or ip address of MazeRunner
-        :param api_key: Api key ID. See below how to get one.
-        :param api_secret: Secret key. See below how to get one.
-        :param certificate: Path to certificate file. See below how to get one.
-        :param use_http: Use unsecure http connection (instead of secure https)
+    :param host: The hostname or IP address of MazeRunner.
+    :param api_key: API key ID. See below how to get one.
+    :param api_secret: Secret key. See below how to get one.
+    :param certificate: Path to certificate file. See below how to get one.
 
-    How to get your api key:
+    How to get your API key and certificate:
 
-        - Login to MazeRunner in your browser
-        - Click on the gear on the top right corner and select Manage API Keys
-        - Click create api key
-        - Select a description and press Create
-        - The api_key will appear as "Key ID"
-        - The api_secret will appear as "Secret Key"
-
-    How to get your certificate:
-
-        - Login to MazeRunner in your browser
-        - Click on the gear on the top right corner and select Manage API Keys
-        - Click download SSL certificate
-
+        - Open your browser and log in to MazeRunner.
+        - Click the gear icon on the top right corner of the screen and select "Manage API keys".
+        - Click "Download SSL certificate" and save the file.
+        - Click "Create API key".
+        - Type a description and click "Create".
+        - The api_key will appear as "Key ID".
+        - The api_secret will appear as "Secret Key".
 
     Example::
 
@@ -962,21 +1371,23 @@ class APIClient(object):
 
             my_service = client.services.get_item(id=8)
     """
-    def __init__(self, host, api_key, api_secret, certificate, use_http=False):
-        '''
-            certificate - path to SSL certificate of the server. If False or None, SSL verification is skipped.
-        '''
-        schema = 'https'
-        if use_http:
-            schema = 'http'
+
+    def __init__(self, host, api_key, api_secret, certificate):
+        """
+        :param host: IP or DNS of MazeRunner.
+        :param api_key: Appears as 'KeyID' in the New API Key screen.
+        :param api_secret: Appears as 'Secret Key' in the New API Key screen.
+        :param certificate: Path to the server's SSL certificate. If False or None, SSL \
+        verification is skipped.
+        """
         self._auth = requests_hawk.HawkAuth(id=api_key, key=api_secret, algorithm="sha256")
         if certificate is None:
             self._certificate = False
         else:
             self._certificate = certificate
-        self._base_url = '%(schema)s://%(host)s' % dict(schema=schema, host=host)
+        self._base_url = 'https://%(host)s' % dict(host=host)
         self._session = requests.Session()
-        self._api_urls = self.api_request('/api/v1.0/')
+        self.api_urls = self.api_request('/api/v1.0/')
 
     def api_request(self,
                     url,
@@ -984,22 +1395,21 @@ class APIClient(object):
                     query_params=None,
                     data=None,
                     files=None,
-                    stream=False):
+                    stream=False,
+                    expect_json_response=True):
         """
-        Execute a synchronic api request against MazeRunner and return the result
+        Execute a synchronous API request against MazeRunner and return the result.
 
-        Parameters:
+        :param url: The request url.
+        :param method: HTTP method (get, post, put, patch, delete).
+        :param query_params: A dict of the request query parameters.
+        :param data: Request body.
+        :param files: Files to be sent with the request.
+        :param stream: Use stream.
+        :param expect_json_response: If True (default), the function will expect an \
+            application/json Content-Type in the response, and will return a parsed object \
+            as a result. If the response is not in JSON format, a ValidationError or ValueError will be raised.
 
-                :param url: The request url
-                :param method: HTTP method (get, post, put, patch, delete)
-                :param query_params: A dictionary of of the request query parameters
-                :param data: Request body
-                :param files: Files to be sent with the request
-                :param stream: Use stream
-                :return: Request result
-
-            **Note:** You'll find out that what you were trying to do is already implemented
-            with a built-in method. You better use it instead.
         """
         if not url.startswith("http"):
             url = self._base_url + url
@@ -1028,10 +1438,14 @@ class APIClient(object):
         if stream:
             return resp
 
-        if method == "delete":
+        if method == "delete" or resp.status_code == NO_CONTENT:
             return
 
         content_type = resp.headers.get("Content-Type", None)
+
+        if not expect_json_response:
+            return resp.content
+
         if content_type != "application/json":
             raise ValidationError(
                 resp.status_code,
@@ -1050,8 +1464,8 @@ class APIClient(object):
     @property
     def decoys(self):
         """
-        Get a :func:`~mazerunner.api_client.DecoyCollection` instance, on which you can
-        perform CRUD operations
+        Get a :class:`~api_client.DecoyCollection` instance, on which you can
+        perform CRUD operations.
 
         Example::
 
@@ -1065,13 +1479,13 @@ class APIClient(object):
             old_decoy = client.decoys.get_item(id=5)
             old_decoy.delete()
         """
-        return DecoyCollection(self, Decoy)
+        return DecoyCollection(self)
 
     @property
     def services(self):
         """
-        Get a :func:`~mazerunner.api_client.ServiceCollection` instance, on which you can
-        perform CRUD operations
+        Get a :class:`api_client.ServiceCollection` instance, on which you can
+        perform CRUD operations.
 
         Example::
 
@@ -1080,27 +1494,27 @@ class APIClient(object):
                 name='app_db_service',
                 type='mysql')
         """
-        return ServiceCollection(self, Service)
+        return ServiceCollection(self)
 
     @property
     def deployment_groups(self):
         """
-        Get a :func:`~mazerunner.api_client.DeploymentGroupCollection` instance, on which you can
-        perform CRUD operations
+        Get a :class:`api_client.DeploymentGroupCollection` instance, on which you can
+        perform CRUD operations.
 
         Example::
 
             client = mazerunner.connect(...)
-            hr_deployment_group = client.deployment_groups.create(name='breadcrumbs_for_hr_machines')
+            hr_deployment_group = client.deployment_groups.create(
+                name='breadcrumbs_for_hr_machines')
         """
-        return DeploymentGroupCollection(self, DeploymentGroup)
+        return DeploymentGroupCollection(self)
 
     @property
     def breadcrumbs(self):
         """
-        Get a :class:`~mazerunner.api_client.BreadcrumbCollection` instance, on which you can
-        perform CRUD operations
-
+        Get a :class:`api_client.BreadcrumbCollection` instance, on which you can
+        perform CRUD operations.
 
         Example::
 
@@ -1111,81 +1525,93 @@ class APIClient(object):
                 deploy_for='root',
                 installation_type='mysql_history')
             """
-        return BreadcrumbCollection(self, Breadcrumb)
+        return BreadcrumbCollection(self)
 
     @property
     def alerts(self):
         """
-        Get a :func:`~mazerunner.api_client.AlertCollection` instance, on which you can
-        perform CRUD operations:
+        Get an :class:`api_client.AlertCollection` instance, on which you can
+        perform read and delete operations.
 
         Example::
 
             client = mazerunner.connect(...)
             code_alerts = client.alerts.filter(alert_types=['code'])
         """
-        return AlertCollection(self, Alert)
+        return AlertCollection(self)
 
     @property
     def endpoints(self):
         """
-        Get a :func:`~mazerunner.api_client.EndpointCollection` instance, on which you can
-        perform CRUD operations:
+        Get an :class:`api_client.EndpointCollection` instance, on which you can
+        perform CRUD operations.
 
         Example::
 
             client = mazerunner.connect(...)
-            code_alerts = client.endpoints.filter(keywords="somethings")
+            code_alerts = client.endpoints.filter(keywords="hr_workstation_")
         """
-        return EndpointCollection(self, Endpoint)
+        return EndpointCollection(self)
 
     @property
     def alert_policies(self):
         """
-        Get a :func:`~mazerunner.api_client.AlertPolicyCollection` instance, on which you can
-        perform update operations:
+        Get an :class:`api_client.AlertPolicyCollection` instance, on which you can
+        perform update operations.
 
         Example::
 
             client = mazerunner.connect(...)
             code_alerts = client.alert_policies.reset_all()
         """
-        return AlertPolicyCollection(self, AlertPolicy)
-
-    @property
-    def alert_rules(self):
-        """
-        Get a :func:`~mazerunner.api_client.AlertRuleCollection` instance, on which you can
-        perform CRUD operations:
-
-        Example::
-
-            client = mazerunner.connect(...)
-            code_alerts = client.active_soc_registration.create(soc_name='name', event_dict=dict(key="Value", key2="Value2"))
-            mute_ip_rule = client.alert_policies.create(
-                originating_ip="192.168.1.5"
-                alert_type="any"
-                to_status=1)
-        """
-        return AlertRuleCollection(self, AlertRule)
+        return AlertPolicyCollection(self)
 
     @property
     def background_tasks(self):
         """
-        Get a :func:`~mazerunner.api_client.BackgroundTaskCollection` instance, on which you can
-        perform read/update operations:
+        Get a :class:`api_client.BackgroundTaskCollection` instance, on which you can
+        perform read and update operations.
 
         Example::
 
             client = mazerunner.connect(...)
             completed_tasks = client.background_tasks.filter(running=False)
         """
-        return BackgroundTaskCollection(self, BackgroundTask)
+        return BackgroundTaskCollection(self)
 
     @property
-    def active_soc_registration(self):
+    def active_soc_events(self):
         """
-        Get a :func:`~mazerunner.api_client.ActiveSocEventRegistrationCollection` instance, on which you can
-        Create Active Soc events
+        Get an :class:`api_client.ActiveSOCEventCollection` instance. You
+        can use this to emit MazeRunner API interface events.
+
+        Example::
+
+            client = mazerunner.connect(...)
+            self.active_soc_events.create_multiple_events('my-soc-interface-name', [{
+                'ComputerName': 'TEST_ENDPOINT1',
+                'EventCode': 4625
+            },{
+                'ComputerName': 'TEST_ENDPOINT2',
+                'EventCode': 529
+            }])
         """
-        return ActiveSocEventRegistrationCollection(self, ActiveSocEventRegistration)
+        return ActiveSOCEventCollection(self)
+
+    @property
+    def cidr_mappings(self):
+        """
+        Get a :class:`api_client.CIDRMappingCollection` instance. You can use this to
+        import, in bulk, endpoints by their reverse DNS record.
+
+        Example::
+
+            client = mazerunner.connect(...)
+            developers_segment = client.cidr_mapping.create(
+                cidr_block='192.168.5.0/24',
+                deployment_group=5,
+                comments='R&D',
+                active=True)
+            developers_segment.generate_endpoints()
+        """
+        return CIDRMappingCollection(self)

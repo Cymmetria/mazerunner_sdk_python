@@ -1,6 +1,6 @@
 """
-This sample script creates a smb deception chain with a list of usernames supplied by the user,
-each having a random password from a passwords file or from a predetermined password pool
+This sample script creates an SMB deception chain with a list of usernames supplied by the user,
+each having a random password from a passwords file or from a predetermined password pool.
 """
 import random
 import argparse
@@ -34,9 +34,10 @@ def _create_dummy_zip_file():
 
     return zip_file_path
 
+
 def get_args():
     """
-    Configure parser the command parameters
+    Configure the command arguments parser
     """
     parser = argparse.ArgumentParser()
     parser.add_argument('ip_address', type=str, help="IP address of MazeRunner management server")
@@ -53,17 +54,17 @@ def main():
     """
     Here is what we do:
 
-        * Parse the command arguments
-        * Create a decoy named "Backup Server Decoy"
-        * Wait till the decoy is created
-        * Create an SMB service
-        * Attach the SMB service to the decoy we created before
-        * Load users & passwords data file
-        * Create breadcrumbs and attach them to the service we created before
-        * Start the decoy machine
+        * Parse the command arguments.
+        * Create a decoy named "Backup Server Decoy".
+        * Wait until the decoy is created.
+        * Create an SMB service.
+        * Attach the SMB service to the decoy we previously created.
+        * Load users & passwords data file.
+        * Create breadcrumbs and attach them to the service we previously created.
+        * Start the decoy machine.
 
-    In the end of this process we'll have a decoy (KVM server), and on it we will have an SMB
-    service installed, and for the SMB we'll have several users.
+    At the end of this process, we will have a nested (KVM) decoy.
+    On that decoy, we will have an SMB service installed, which will have several SMB users.
     """
     args = get_args()
 

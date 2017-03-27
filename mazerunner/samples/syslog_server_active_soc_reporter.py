@@ -1,6 +1,6 @@
 """
-This sample script runs a syslog server that will get CEF messages and send them back
-to the MazeRunner's ActiveSOC using the API.
+This sample script runs a syslog server that will receive CEF messages and send them back
+to MazeRunner's ActiveSOC using the API.
 """
 import argparse
 import requests
@@ -96,7 +96,7 @@ def get_syslog_handler(client):
         def handle(self):
             data = bytes.decode(self.request[0])
             cef_data = CEFEvent.parse_cef_str(data).to_json()
-            self._client.active_soc_registration.create(soc_name='api-soc', event_dict=cef_data)
+            self._client.active_soc_events.create(soc_name='api-soc', event_dict=cef_data)
     return SyslogUDPHandler
 
 

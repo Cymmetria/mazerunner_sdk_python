@@ -1,5 +1,5 @@
 """
-This script will delete all the entities on your MazeRunner system
+This script will delete all of the entities on your MazeRunner system.
 """
 import argparse
 import sys
@@ -10,6 +10,7 @@ WAIT_TIME = 3 # Time to wait in seconds
 DISPLAY_FORMAT = '''Got a new alert!
 Decoy: {decoy_name}
 Alert Type: {alert_type}'''
+
 
 def get_args():
     """
@@ -25,15 +26,16 @@ def get_args():
                         help="Show mute-level alerts as well as alert-level alerts")
     return parser.parse_args()
 
+
 def main():
     """
-    Here's what we do:
+    Here is what we do:
 
-        * Parse command arguments
+        * Parse command arguments.
         * Fetch all possible types of alerts.
         * Get an AlertCollection: show/hide muted alerts according to option specified in \
         the command, and show all types of alerts.
-        * Check the current amount of alerts
+        * Check the current amount of alerts.
         * Periodically check for alerts and print the new ones.
 
     """

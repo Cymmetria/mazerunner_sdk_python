@@ -5,6 +5,7 @@ from socket import gethostbyaddr
 from netaddr import IPNetwork
 import mazerunner
 
+
 def get_hostname_for_ip(ip_address):
     name = None
     try:
@@ -13,12 +14,14 @@ def get_hostname_for_ip(ip_address):
         pass
     return name
 
+
 def find_deployment_group(client, group_name):
     for group in client.deployment_groups:
         if group.name == group_name:
             return group
 
     raise ValueError('Deployment group "{}" could not be found'.format(group_name))
+
 
 def find_endpoint(endpoints, hostname):
     hostname = hostname.lower()
@@ -27,6 +30,7 @@ def find_endpoint(endpoints, hostname):
            (x.hostname and x.hostname.lower() == hostname):
             return x
     return None
+
 
 def assign_group_to_cidr(deployment_group, cidr, connection_params):
     network = IPNetwork(cidr)
@@ -70,6 +74,7 @@ def main():
                              api_secret=args.api_secret,
                              certificate=args.certificate)
     assign_group_to_cidr(args.deployment_group, args.cidr, connection_params)
+
 
 if __name__ == '__main__':
     main()

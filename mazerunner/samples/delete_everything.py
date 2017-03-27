@@ -1,14 +1,16 @@
 """
-This script will delete all the entities on your MazeRunner system
+This script will delete all of the entities on your MazeRunner system.
 """
 import argparse
 import mazerunner
+
 
 def _delete_items_in_collection(collection, exclude_persist=False):
     for item in list(collection):
         if exclude_persist and getattr(item, "persist", False):
             continue
         item.delete()
+
 
 def get_args():
     """
@@ -22,16 +24,17 @@ def get_args():
                         type=str, help="The file path to the SSL certificate of the MazeRunner management server")
     return parser.parse_args()
 
+
 def main():
     """
-    Here's what we do:
+    Here is what we do:
 
-        * Parse command arguments
-        * Create MazeRunner connection
-        * Get a collection of all breadcrumbs
-        * Delete all elements in the collection
-        * Same for services
-        * Same for decoys
+        * Parse command arguments.
+        * Create MazeRunner connection.
+        * Get a collection of all breadcrumbs.
+        * Delete all elements in the collection.
+        * Same for services.
+        * Same for decoys.
 
     """
     args = get_args()

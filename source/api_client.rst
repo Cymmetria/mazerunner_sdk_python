@@ -1,123 +1,132 @@
 =======================
-MazeRunner SDK Elements
+MazeRunner SDK elements
 =======================
 
 
 APIClient
 =========
 
-.. autoclass:: mazerunner.api_client.APIClient
+.. autoclass:: api_client.APIClient
    :members:
 
 
-Decoy
-=====
-.. autoclass:: mazerunner.api_client.Decoy
+Decoys
+======
+.. autoclass:: api_client.Decoy
    :members:
+   :inherited-members:
 
-.. autoclass:: mazerunner.api_client.DecoyCollection
+.. autoclass:: api_client.DecoyCollection
    :members:
+   :inherited-members:
+   :exclude-members: MODEL_CLASS
 
 
-Service
-=======
-.. autoclass:: mazerunner.api_client.Service
-   :members:
-
-.. autoclass:: mazerunner.api_client.ServiceCollection
-   :members:
-
-
-Breadcrumb
-==========
-
-.. autoclass:: mazerunner.api_client.Breadcrumb
-   :members:
-
-.. autoclass:: mazerunner.api_client.BreadcrumbCollection
-   :members:
-
-
-DeploymentGroup
-===============
-
-.. autoclass:: mazerunner.api_client.DeploymentGroup
-   :members:
-
-.. autoclass:: mazerunner.api_client.DeploymentGroupCollection
-   :members:
-
-
-Alert
-=====
-.. autoclass:: mazerunner.api_client.Alert
-   :members:
-
-.. autoclass:: mazerunner.api_client.AlertCollection
-   :members:
-
-
-Endpoint
+Services
 ========
-.. autoclass:: mazerunner.api_client.Endpoint
+.. autoclass:: api_client.Service
    :members:
+   :inherited-members:
 
-.. autoclass:: mazerunner.api_client.EndpointCollection
+.. autoclass:: api_client.ServiceCollection
    :members:
+   :inherited-members:
+   :exclude-members: MODEL_CLASS
 
 
-AlertPolicy
+Breadcrumbs
 ===========
-.. autoclass:: mazerunner.api_client.AlertPolicy
+
+.. autoclass:: api_client.Breadcrumb
    :members:
+   :inherited-members:
 
-.. autoclass:: mazerunner.api_client.AlertPolicyCollection
+.. autoclass:: api_client.BreadcrumbCollection
    :members:
+   :inherited-members:
+   :exclude-members: MODEL_CLASS
 
 
-AlertRule
+Deployment groups
+=================
+
+.. autoclass:: api_client.DeploymentGroup
+   :members:
+   :inherited-members:
+
+.. autoclass:: api_client.DeploymentGroupCollection
+   :members:
+   :inherited-members:
+   :exclude-members: MODEL_CLASS
+
+
+Alerts
+======
+.. autoclass:: api_client.Alert
+   :members:
+   :inherited-members:
+
+.. autoclass:: api_client.AlertCollection
+   :members:
+   :inherited-members:
+   :exclude-members: MODEL_CLASS
+
+
+Endpoints
 =========
-.. autoclass:: mazerunner.api_client.AlertRule
+.. autoclass:: api_client.Endpoint
    :members:
+   :inherited-members:
 
-.. autoclass:: mazerunner.api_client.AlertRuleCollection
+.. autoclass:: api_client.EndpointCollection
    :members:
+   :inherited-members:
+   :exclude-members: MODEL_CLASS
+
+.. seealso:: modules :py:mod:`api_client.CIDRMapping`
 
 
-BackgroundTask
+Alert policies
 ==============
-.. autoclass:: mazerunner.api_client.BackgroundTask
+.. autoclass:: api_client.AlertPolicy
    :members:
+   :inherited-members:
 
-.. autoclass:: mazerunner.api_client.BackgroundTaskCollection
+.. autoclass:: api_client.AlertPolicyCollection
    :members:
+   :inherited-members:
+   :exclude-members: MODEL_CLASS
 
 
-Abstract Helpers
+Background tasks
 ================
-.. autoclass:: mazerunner.api_client.Entity
+.. autoclass:: api_client.BackgroundTask
    :members:
+   :inherited-members:
 
-.. autoclass:: mazerunner.api_client.BaseEntity
+.. autoclass:: api_client.BackgroundTaskCollection
    :members:
-
-.. autoclass:: mazerunner.api_client.RelatedCollection
-   :members:
-
-.. autoclass:: mazerunner.api_client.EditableCollection
-   :members:
-
-.. autoclass:: mazerunner.api_client.Collection
-   :members:
-
-.. autoclass:: mazerunner.api_client.BaseCollection
-   :members:
+   :inherited-members:
+   :exclude-members: MODEL_CLASS
 
 
-Active Soc Registration
-=======================
-.. autoclass:: mazerunner.api_client.ActiveSocEventRegistration
+CIDR mapping
+============
+.. autoclass:: api_client.CIDRMapping
    :members:
+   :inherited-members:
 
-.. autoclass:: mazerunner.api_client.ActiveSocEventRegistrationCollection
+.. autoclass:: api_client.CIDRMappingCollection
    :members:
+   :inherited-members:
+   :exclude-members: MODEL_CLASS
+
+.. seealso:: modules :py:mod:`api_client.Endpoint`
+
+
+ActiveSOC events
+================
+.. autoclass:: api_client.ActiveSOCEventCollection
+   :members:
+   :inherited-members:
+   :exclude-members: MODEL_CLASS
