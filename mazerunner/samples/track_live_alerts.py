@@ -1,5 +1,5 @@
 """
-This script will delete all of the entities on your MazeRunner system.
+This script will periodically query MazeRunner for new events and print them.
 """
 import argparse
 import sys

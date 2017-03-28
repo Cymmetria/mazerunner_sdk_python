@@ -17,4 +17,4 @@ Fork us at https://github.com/Cymmetria/mazerunner_sdk_python
    installation
    api_client
    samples
-
+   Download as PDF <https://community.cymmetria.com/sdk.pdf>
