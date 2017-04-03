@@ -1,0 +1,32 @@
+Metadata-Version: 1.1.3
+Name: mazerunner_sdk_python
+Version: 1.1.3
+Summary: MazeRunner python SDK
+Home-page: https://github.com/Cymmetria/mazerunner_sdk_python
+Author: Cymmetria
+License: BSD-3
+Download-URL: https://github.com/Cymmetria/mazerunner_sdk_python/archive/1.1.3.tar.gz
+Description: This library implements a convenient client for MazeRunner™ API for Python.
+        Using this library, you will be able to easily configure and manipulate the key features
+        of MazeRunner, such as the creation of a deception campaign, turning decoys on or off, deployment on
+        remote endpoints, and inspecting alerts with their attached evidence.
+        
+        See the documentation at https://community.cymmetria.com/api
+        
+        Fork us at https://github.com/Cymmetria/mazerunner_sdk_python
+
+Keywords: mazerunner, sdk, python, deception
+Requires: argparse
+Requires: mohawk
+Requires: requests
+Requires: requests-hawk
+Requires: six
+Requires: wsgiref
+Platform: any
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Topic :: Software Development :: Libraries
