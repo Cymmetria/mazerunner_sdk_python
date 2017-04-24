@@ -21,7 +21,8 @@ def get_args():
     parser.add_argument('api_key', type=str, help="The API key")
     parser.add_argument('api_secret', type=str, help="The API secret")
     parser.add_argument('certificate',
-                        type=str, help="The file path to the SSL certificate of the MazeRunner management server")
+                        type=str, help="The file path to the SSL certificate of the "
+                                       "MazeRunner management server")
     return parser.parse_args()
 
 
@@ -33,33 +34,47 @@ def main():
         * Create MazeRunner connection.
         * Get a collection of all breadcrumbs.
         * Delete all elements in the collection.
-        * Same for services.
-        * Same for decoys.
+        * Same for deployment groups, decoys, services, endpoints, cidr mappings, background tasks
 
     """
     args = get_args()
 
-    client = mazerunner.connect(args.ip_address, args.api_key, args.api_secret, args.certificate, False)
+    client = mazerunner.connect(args.ip_address, args.api_key, args.api_secret, args.certificate)
 
-    # delete breadcrumbs:
+    # Delete breadcrumbs:
     breadcrumbs = client.breadcrumbs
-    print 'deleting %d breadcrumbs' % len(breadcrumbs)
+    print 'Deleting %d breadcrumbs' % len(breadcrumbs)
     _delete_items_in_collection(breadcrumbs)
 
-    # delete deployment groups:
+    # Delete deployment groups:
     deployment_groups = client.deployment_groups
-    print 'deleting %d deployment groups' % len(deployment_groups)
+    print 'Deleting %d deployment groups' % len(deployment_groups)
     _delete_items_in_collection(deployment_groups, exclude_persist=True)
 
-    # delete services:
+    # Delete services:
     services = client.services
-    print 'deleting %d services' % len(services)
+    print 'Deleting %d services' % len(services)
     _delete_items_in_collection(services)
     
-    # delete decoys:
+    # Delete decoys:
     decoys = client.decoys
-    print 'deleting %d decoys' % len(decoys)
+    print 'Deleting %d decoys' % len(decoys)
     _delete_items_in_collection(decoys)
+
+    # Delete CIDR mappings:
+    cidr_mappings = client.cidr_mappings
+    print 'Deleting %d cidr mappings' % len(cidr_mappings)
+    _delete_items_in_collection(cidr_mappings)
+
+    # Delete endpoints:
+    endpoints = client.endpoints
+    print 'Deleting %d endpoints' % len(endpoints)
+    _delete_items_in_collection(endpoints)
+
+    # Acknowledge all complete background tasks:
+    print 'Acknowledging all complete background tasks'
+    client.background_tasks.acknowledge_all_complete()
+
 
 if __name__ == '__main__':
     main()
