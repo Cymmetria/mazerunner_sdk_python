@@ -1,3 +1,4 @@
+import json
 from httplib import NO_CONTENT
 import shutil
 from numbers import Number
@@ -258,7 +259,9 @@ class Decoy(Entity):
         try:
             return self._api_client.api_request("{}{}".format(self.url, 'test_dns/'), 'post')
         except ValidationError as e:
-            if str(e) == '{"non_field_errors":["Failed to resolve address for decoy"]}':
+            data = json.loads(e.message)
+            errors = data.get("non_field_errors", [])
+            if len(errors) == 1 and errors[0].startswith("Failed to resolve address for decoy"):
                 return False
             raise
 
