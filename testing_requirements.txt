@@ -6,3 +6,4 @@ pytest-cov==2.4.0
 retrying==1.3.3
 Sphinx==1.4.5
 sphinx-rtd-theme==0.1.9
+paramiko==2.2.1

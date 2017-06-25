@@ -1,6 +1,7 @@
 """
-This sample script deploys (install/uninstall) a specific Deployment Group on linux endpoint[s] supplied by the user.
-A unique endpoint can be provided from the command line, or use a csv file to deploy on multiple endpoints.
+This sample script deploys (install/uninstall) a specific Deployment Group on linux endpoint[s]
+supplied by the user. A unique endpoint can be provided from the command line, or use a csv file to
+deploy on multiple endpoints.
 """
 import tempfile
 import mazerunner
@@ -26,13 +27,18 @@ def get_args():
     parser.add_argument('ip_address', type=str, help="IP address of MazeRunner management server.")
     parser.add_argument('api_key', type=str, help="The API key.")
     parser.add_argument('api_secret', type=str, help="The API secret.")
-    parser.add_argument('deployment_type', type=str, help='Specify which deployment we want to do - install/uninstall.',
+    parser.add_argument('deployment_type', type=str,
+                        help='Specify which deployment we want to do - install/uninstall.',
                         choices=['install', 'uninstall'])
-    parser.add_argument('deployment_group', type=str, help='The name of the Deployment Group in MazeRunner.')
-    parser.add_argument('--certificate',
-                        type=str, help="The file path to the SSL certificate of the MazeRunner management server.")
+    parser.add_argument('deployment_group', type=str,
+                        help='The name of the Deployment Group in MazeRunner.')
+    parser.add_argument(
+        '--certificate',
+        type=str,
+        help="The file path to the SSL certificate of the MazeRunner management server.")
     parser.add_argument('--ip', type=str, help='ip of a linux endpoint to deploy.')
-    parser.add_argument('--port', type=int, help='ssh port of a linux endpoint - default to 22.', default='22')
+    parser.add_argument('--port', type=int, help='ssh port of a linux endpoint - default to 22.',
+                        default='22')
     parser.add_argument('--user', type=str, help='username of the linux endpoint to deploy.')
     parser.add_argument('--passwd', type=str, help='password of the linux endpoint to deploy.')
     parser.add_argument('--csv', type=str, help='Name of a CSV file, each line of the CSV should '
@@ -57,6 +63,7 @@ def init_ssh_client(host, port, user, passwd):
     transport = sshclient.get_transport()
     sftpclient = paramiko.SFTPClient.from_transport(transport)
     return sshclient, sftpclient
+
 
 def run_cmd(ssh, cmd):
     """
@@ -115,6 +122,10 @@ def deploy_zip_on_endpoints(zipfile, endpoints, deploy_type, deployment_group):
                 ntpath.basename(zipfile)[:-4]
             )
             run_cmd(ssh, run_setup_cmd)
+
+            # Delete the original zip file
+            rm_file_cmd = 'sudo rm -rf {} {}'.format(zipfile, zipfile[:-4])
+            run_cmd(ssh, rm_file_cmd)
 
             print("MazeRunner deployment group '{}' {}ed successfully on '{}'.".format(
                 deployment_group,
@@ -178,7 +189,7 @@ def main():
         raise Exception("No endpoints found to work on.")
 
     # Init the MazeRunner client
-    client = mazerunner.connect(args.ip_address, args.api_key, args.api_secret, args.certificate, False)
+    client = mazerunner.connect(args.ip_address, args.api_key, args.api_secret, args.certificate)
 
     # Get a new tempfile name
     dep_file = tempfile.mkdtemp()
@@ -195,7 +206,9 @@ def main():
     deployment_group.deploy(dep_file, 'Linux', args.deployment_type, 'ZIP')
 
     # Deploy the file on all endpoints we have
-    deploy_zip_on_endpoints(dep_file_full, linux_endpoints_to_deploy, args.deployment_type, args.deployment_group)
+    deploy_zip_on_endpoints(dep_file_full, linux_endpoints_to_deploy, args.deployment_type,
+                            args.deployment_group)
+
 
 if __name__ == "__main__":
     main()

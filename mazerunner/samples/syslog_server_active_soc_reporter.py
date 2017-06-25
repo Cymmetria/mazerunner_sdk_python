@@ -130,8 +130,7 @@ def main():
     client = mazerunner.connect(args.ip_address,
                                 args.api_key,
                                 args.api_secret,
-                                args.certificate,
-                                False)
+                                args.certificate)
 
     try:
         server = SocketServer.UDPServer((HOST, PORT), get_syslog_handler(client))

@@ -9,6 +9,6 @@ mazerunner_sdk.egg-info/
 dist
 .coverage
 .cache
-sdk-venv
+.sdk
 htmlcov
 test_deployments

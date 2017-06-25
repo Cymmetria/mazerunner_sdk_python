@@ -33,8 +33,8 @@ Structure of the json_credentials file:
 
 ###Generate documentation files:
 ~~~~
-export PYTHONPATH=`pwd`
-make html
+make dev-env
+make docs
 ~~~~
 
 ###See documentation at [https://community.cymmetria.com/api](https://community.cymmetria.com/api)
