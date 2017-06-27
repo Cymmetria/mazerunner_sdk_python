@@ -41,7 +41,7 @@ def main():
     """
     args = get_args()
 
-    client = mazerunner.connect(args.ip_address, args.api_key, args.api_secret, args.certificate, False)
+    client = mazerunner.connect(args.ip_address, args.api_key, args.api_secret, args.certificate)
 
     # Get alerts
     alerts = client.alerts
