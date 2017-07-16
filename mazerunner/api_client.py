@@ -1,4 +1,5 @@
 import json
+import urlparse
 from httplib import NO_CONTENT
 import shutil
 from numbers import Number
@@ -14,7 +15,7 @@ class BaseCollection(object):
 
     def __init__(self, api_client, obj_class=None):
         """
-        :param api_client: The connection instance. 
+        :param api_client: The connection instance.
         :param obj_class: The class, instance of which all the members should be.
         """
         self._api_client = api_client
@@ -1416,6 +1417,22 @@ class APIClient(object):
         """
         if not url.startswith("http"):
             url = self._base_url + url
+
+        parsed = urlparse.urlparse(url)
+        parsed_no_query = urlparse.ParseResult(
+            scheme=parsed.scheme,
+            netloc=parsed.netloc,
+            path=parsed.path,
+            params=parsed.params,
+            query='',
+            fragment=parsed.fragment)
+        url = urlparse.urlunparse(parsed_no_query)
+        query = {query_param_name: set(query_param_value)
+                 for query_param_name, query_param_value
+                 in urlparse.parse_qs(parsed.query).items()}
+        if query_params:
+            query.update(query_params)
+        query_params = query
 
         request_args = dict(
             method=method,
