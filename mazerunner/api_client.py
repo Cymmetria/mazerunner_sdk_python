@@ -9,6 +9,7 @@ import requests_hawk
 from mazerunner.exceptions import ValidationError, ServerError, BadParamError, \
     InvalidInstallMethodError
 
+ALERTS_PER_PAGE = 500
 
 class BaseCollection(object):
     MODEL_CLASS = None
@@ -869,7 +870,8 @@ class AlertCollection(Collection):
     def _get_query_params(self):
         return dict(filter_enabled=self.filter_enabled,
                     only_alerts=self.only_alerts,
-                    alert_types=self.alert_types)
+                    alert_types=self.alert_types,
+                    per_page=ALERTS_PER_PAGE)
 
     def filter(self, filter_enabled=False, only_alerts=False, alert_types=None):
         """
