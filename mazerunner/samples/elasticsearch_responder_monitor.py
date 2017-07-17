@@ -1,38 +1,6 @@
 """
-This script should be used together with MazeRunner's Responder feature.
-The Responder feature generates "net use" requests in the network, which will
-function as the breadcrumbs.
-When an attacker runs the Responder.py attack tool, they will
-"catch" that username, and when they make a failed attempt to authenticate using that username,
-an event will be logged by the hacked endpoint.
-From there, the logged event will be sent to Elasticsearch.
-
-This script will find the event in Elasticsearch and send it to MazeRunner. For other products,
-like Splunk, MazeRunner already has a built-in integration.
-
-In order to use this script, please configure the following:
-
-1. Open the configuration screen in MazeRunner and go to the SOC tab.
-Under "SOC Interfaces", click "Add", choose "SOC via MazeRunner API", and
-give it a name (we named it "elasticsearch_responder" in the example below).
-
-2. Still on the SOC tab, turn on the Responder, and provide credentials for the Responder to
-access the endpoints and run the "net use" commands.
-
-3. At the bottom of the SOC tab, in the 'Map Responder fields' section, click 'Add' and create a
-mapping of the required fields to their names in your Elasticsearch system.
-
-4. On the Manage API keys screen, generate an API key-secret pair, and download
-the certificate to your computer.
-
-5. On the Campaign screen, create a nested decoy, an SMB service,
-and a "Responder - Pass the Hash" breadcrumb, and connect them all together.
-
-6. Create a deployment group and connect the Responder breadcrumb and several endpoints to that
-deployment group.
-
-7. Create a configuration file and pass its name as the first parameter for this
-script. Use the -h option for displaying a sample configuration JSON file.
+This script will allow you to integrate the Responder feature in MazeRunner with ElasticSearch.
+For usage information, run the script with no params.
 """
 
 
@@ -279,30 +247,30 @@ class Config(object):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(
-        usage='This script should be used together with the Responder feature of MazeRunner.\n'
-              'The Responder generates "net use" requests in the network, which will\n'
-              'function as the breadcrumbs, using which we want the attacker to try to\n'
-              'authenticate. As soon as the attacker tries to login using this user,\n'
-              'the event will be logged and sent to elastic search. This script will find\n'
+        usage='\n'
+              'This script should be used together with the Responder feature of MazeRunner.\n'
+              'The Responder breadcrumb and service detect Responder.py tool usage in your '
+              'network.\n'
+              'When MazeRunner detects such tool it feeds it with the credentials you configured\n'
+              'in the breadcrumb.\n'
+              'As soon as the attacker tries to use these stolen credentials and log in\n'
+              'to one of the monitored assets in your network,\n'
+              'the event will be logged and sent to ElasticSearch. This script will find\n'
               'the event in ElasticSearch and send it to MazeRunner. For other products,\n'
               'like Splunk, MazeRunner already has a built-in integration.\n\n'
               'In order to use this script, please configure the following:\n\n'
-              '1. Open the configuration screen in MazeRunner and go to the SOC tab.\n'
-              'Under "SOC Interfaces" click "add", choose "SOC via MazeRunner API" and\n\n'
-              'give it a name (we named it "elasticsearch_responder" in the example below).\n'
-              '2. Still on the SOC tab, turn on the Responder, and provide it credentials using '
-              'which it can access the endpoints and run the "net use" commands.\n\n'
-              '3. At the bottom of the SOC tab, in the "Map Responder fields" section, click '
-              '"Add" and create a mapping of the required fields to their names in your '
-              'Elasticsearch system.\n\n'
-              '4. In the Manage API Keys screen, generate an api key-secret pair, and download \n'
-              'the certificate to your computer.\n\n'
-              '5. In the campaign screen, create a nested decoy, an SMB service,\n'
-              'and a "Responder - Pass the Hash" breadcrumb, and connect them all together.\n\n'
-              '6. Create a deployment group and connect to it the responder breadcrumb and '
-              'several endpoints.\n\n'
-              '7. Create a configuration file and pass its name as the first parameter for this\n'
-              'script. Here is an example for the file:\n\n %s' % Config.get_example())
+              '1. Open the ActiveSOC tab in MazeRunner.\n'
+              'Under "SOC Interfaces" click "add", choose "SOC via MazeRunner API" and\n'
+              'give it a name (we named it "elasticsearch_responder" in the example below).\n\n'
+              '2. In the Settings tab, go to the "API Keys" sub-tab. There, generate an api \n'
+              'key-secret pair, and download the certificate to your computer.\n\n'
+              '3. Create a responder campaign. For more information about this step,\n'
+              'see the "ActiveSoc and responder monitor activity feed" section in the user '
+              'manual.\n\n'
+              '4. Under the ActiveSOC tab, go to "Responder Monitor", and make sure '
+              'that "Responder monitor SOC integration" is activated.\n\n'
+              '5. Create a configuration file and pass the file name as the first parameter for \n'
+              'this script. Here is an example for the file:\n\n %s' % Config.get_example())
     parser.add_argument('config_file')
     args = parser.parse_args()
 
