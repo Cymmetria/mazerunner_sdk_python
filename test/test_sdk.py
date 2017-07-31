@@ -457,7 +457,7 @@ class TestDeploymentGroups(APITest):
         assert dep_group.check_conflicts('Windows') == [
             {
                 u'error': u"Conflict between breadcrumbs ssh1 and ssh2: "
-                          u"Two SSH breadcrumb can't point to the same "
+                          u"Two SSH breadcrumbs can't point to the same "
                           u"user/decoy combination on the same endpoint"
             }
         ]
