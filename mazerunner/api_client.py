@@ -599,10 +599,10 @@ class DeploymentGroupCollection(EditableCollection):
             domain=domain,
             deploy_on=deploy_on
         )
-        url = "{}1/".format(self._get_url().replace(self._obj_class.NAME, 'deploy'))
+        url = "{}{}/".format(self._get_url(), 'deploy')
         return self._api_client.api_request(url=url,
-                                             method='put',
-                                             data=data)
+                                            method='post',
+                                            data=data)
 
     def deploy_all(self, location_with_name, os, download_format="ZIP"):
         """
