@@ -599,9 +599,10 @@ class DeploymentGroupCollection(EditableCollection):
             domain=domain,
             deploy_on=deploy_on
         )
-        self._api_client.api_request(url="{}{}".format(self._get_url(), "auto_deploy_groups/"),
-                                     method='post',
-                                     data=data)
+        url = "{}{}/".format(self._get_url(), 'deploy')
+        return self._api_client.api_request(url=url,
+                                            method='post',
+                                            data=data)
 
     def deploy_all(self, location_with_name, os, download_format="ZIP"):
         """
