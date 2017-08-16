@@ -85,7 +85,7 @@ class EditableCollection(Collection):
         :param files: Relevant file paths to upload for the element.
         """
         response = self._api_client.api_request(self._get_url(), 'post', data=data, files=files)
-        return self._obj_class(self._api_client, response)
+        return self._obj_class(self._api_client, response).load()
 
 
 class UnpaginatedEditableCollection(EditableCollection):
@@ -146,8 +146,9 @@ class BaseEntity(object):
                                                  self._param_dict.get(key, [])))
 
         for key, field_type in self.RELATED_FIELDS.iteritems():
-            if key in self._param_dict:
-                setattr(self, key, field_type(self._api_client, self._param_dict[key]))
+            value = self._param_dict.get(key, None)
+            if value:
+                setattr(self, key, field_type(self._api_client, value))
 
     def __getattr__(self, item):
         if item not in self._param_dict:
@@ -941,6 +942,10 @@ class Endpoint(Entity):
 
     NAME = 'endpoint'
 
+    RELATED_FIELDS = {
+        'deployment_group': DeploymentGroup,
+    }
+
     def delete(self):
         """
         Delete the endpoint.
@@ -951,7 +956,7 @@ class Endpoint(Entity):
         self._api_client.api_request(url, 'post', data=data)
 
 
-class EndpointCollection(Collection):
+class EndpointCollection(EditableCollection):
     """
     A subset of the endpoints in the system.
 
@@ -984,6 +989,19 @@ class EndpointCollection(Collection):
         self.keywords = keywords
         self.statuses = statuses
         self.deploy_groups = deploy_groups
+
+    def create(self, ip_address=None, dns=None, hostname=None, deployment_group_id=None):
+        """
+        Create an Endpoint.
+
+        Pass at least ip_address or dns or hostname as a parameter
+        :param deployment_group_id: id of the deployment group
+        :param ip_address: address of the endpoint
+        :param dns: fqdn of the endpoint
+        :param hostname: hostname of the endpoint
+        """
+        data = dict(ip_address=ip_address, dns=dns, hostname=hostname, deployment_group=deployment_group_id)
+        return self.create_item(data=data)
 
     def _get_query_params(self):
         return {

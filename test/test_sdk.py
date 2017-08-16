@@ -732,10 +732,12 @@ class TestAlert(APITest):
 class TestEntity(APITest):
     def test_repr(self):
         service = self.services.create(name=SSH_SERVICE_NAME, service_type="ssh")
-        assert str(service) == "<Service: url=u'https://{serv}/api/v1.0/service/{service_id}/' " \
-            "service_type=u'ssh' id={service_id} name=u'ssh_service'>".format(
-            serv=self.mazerunner_ip_address,
-            service_id=service.id)
+
+        str_service = "<Service: available_decoys=[] name=u'ssh_service' service_type_name=u'SSH' " \
+                      "url=u'https://{serv}/api/v1.0/service/{service_id}/' " \
+                      "attached_decoys=[] is_active=False service_type=u'ssh' id={service_id}>".format(
+                          serv=self.mazerunner_ip_address, service_id=service.id)
+        assert str(service) == str_service
 
     def test_get_attribute(self):
         service = self.services.create(name=SSH_SERVICE_NAME, service_type="ssh")
@@ -871,7 +873,7 @@ class TestEndpoints(APITest):
 
             cidr_mapping = self.cidr_mappings.create(
                 cidr_block='%s/30' % self.lab_endpoint_ip,
-                deployment_group=1,
+                deployment_group_id=1,
                 comments='no comments',
                 active=True
             )
@@ -958,7 +960,7 @@ class TestEndpoints(APITest):
 
             self.cidr_mappings.create(
                 cidr_block='%s/24' % self.lab_endpoint_ip,
-                deployment_group=1,
+                deployment_group_id=1,
                 comments='no comments',
                 active=True
             )
@@ -979,3 +981,43 @@ class TestEndpoints(APITest):
         _test_delete()
         _test_data()
         _test_stop_import()
+
+    def test_create_endpoint(self):
+        for params in [
+            dict(ip_address='1.1.1.1'),
+            dict(dns='endpoint_address.endpoint.local'),
+            dict(hostname='hostname'),
+            dict(dns='endpoint_address.endpoint.local', ip_address='1.1.1.1'),
+        ]:
+            endpoint = self.endpoints.create(**params)
+            assert endpoint
+            for key, value in params.iteritems():
+                assert getattr(endpoint, key) == value
+            assert len(self.endpoints) == 1
+            endpoint.delete()
+
+    def test_create_endpoint_with_deployment_group(self):
+        ip_address = "1.1.1.1"
+        endpoint = self.endpoints.create(ip_address=ip_address, deployment_group_id=1)
+        assert endpoint.ip_address == ip_address
+        assert endpoint.deployment_group.name == "All Breadcrumbs"
+        endpoint.delete()
+
+    def test_create_invalid_endpoint(self):
+        for params, expected_error_message in [
+            (dict(ip_address='1.1.1.1.1'), "Enter a valid IPv4 address."),
+            (dict(dns='A'*256), "Ensure this field has no more than 255 characters."),
+            (dict(hostname='A'*15), "Ensure this field has no more than 15 characters."),
+            (dict(), "require dns or hostname or ip_address"),
+        ]:
+            try:
+                self.endpoints.create(**params)
+                raise AssertionError, "Creation of the endpoint should raise an exception"
+            except ValidationError as e:
+                error = json.loads(e.message)
+                if params:
+                    for key in params:
+                        assert key in error
+                        assert error[key] == [expected_error_message]
+                else:
+                    assert error["non_field_errors"] == [expected_error_message]
