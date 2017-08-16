@@ -994,7 +994,7 @@ class EndpointCollection(EditableCollection):
         """
         Create an Endpoint.
 
-        Pass at least ip_address or dns or hostname as a parameter
+        Pass at least one of the following parameters: ip_address, dns, or hostname
         :param deployment_group_id: id of the deployment group
         :param ip_address: address of the endpoint
         :param dns: fqdn of the endpoint
