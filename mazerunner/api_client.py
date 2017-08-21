@@ -955,25 +955,50 @@ class AlertCollection(Collection):
 
     MODEL_CLASS = Alert
 
-    def __init__(self, api_client, filter_enabled=False, only_alerts=False, alert_types=None):
+    def __init__(self, api_client, filter_enabled=False, only_alerts=False, alert_types=None,
+                 start_date=None, end_date=None, id_greater_than=None, username=None, source=None,
+                 keywords=None, decoy_name=None):
         """
         :param api_client: The connection instance.
         :param filter_enabled: Whether this is a filtered collection.
         :param only_alerts: Filter out alerts in status 'Ignore' and 'Mute'.
         :param alert_types: E.g., code, HTTP, etc. See params() for the full list.
+        :param start_date: The beginning of the date range, formatted dd/mm/yyyy.
+        :param end_date: The end of the date range, formatted dd/mm/yyyy.
+        :param id_greater_than: Filter alerts to see only alerts that occur after this ID.
+        :param username: The breadcrumb's username, which the attacker used to log in.
+        :param source: The IP or hostname of the attacker's endpoint.
+        :param keywords: Search main fields for these keywords.
+        :param decoy_name: The name of the decoy that was attacked.
         """
         super(AlertCollection, self).__init__(api_client)
         self.filter_enabled = filter_enabled
         self.only_alerts = only_alerts
         self.alert_types = alert_types
+        self.start_date = start_date
+        self.end_date = end_date
+        self.id_greater_than = id_greater_than
+        self.username = username
+        self.source = source
+        self.keywords = keywords
+        self.decoy_name = decoy_name
 
     def _get_query_params(self):
         return dict(filter_enabled=self.filter_enabled,
                     only_alerts=self.only_alerts,
                     alert_types=self.alert_types,
-                    per_page=ALERTS_PER_PAGE)
+                    per_page=ALERTS_PER_PAGE,
+                    start_date=self.start_date,
+                    end_date=self.end_date,
+                    id_gt=self.id_greater_than,
+                    username=self.username,
+                    source=self.source,
+                    keywords=self.keywords,
+                    decoy_name=self.decoy_name)
 
-    def filter(self, filter_enabled=False, only_alerts=False, alert_types=None):
+    def filter(self, filter_enabled=False, only_alerts=False, alert_types=None,
+               start_date=None, end_date=None, id_greater_than=None, username=None, source=None,
+               keywords=None, decoy_name=None):
         """
         Get alerts by query.
 
@@ -981,11 +1006,27 @@ class AlertCollection(Collection):
         :param only_alerts: Only take alerts in 'Alert' status (exclude those in 'Mute' and \
         'Ignore' status).
         :param alert_types: A list of alert types.
+        :param start_date: The beginning of the date range, formatted dd/mm/yyyy.
+        :param end_date: The end of the date range, formatted dd/mm/yyyy.
+        :param id_greater_than: Filter alerts to see only alerts that occur after this ID.
+        :param username: The breadcrumb's username, which the attacker used to log in.
+        :param source: The IP or hostname of the attacker's endpoint.
+        :param keywords: Search main fields for these keywords.
+        :param decoy_name: The name of the decoy that was attacked.
         :return: A filtered :class:`api_client.AlertCollection`.
         """
         formatted_alert_types = " ".join(alert_types) if alert_types else ""
-        return AlertCollection(self._api_client, filter_enabled=filter_enabled,
-                               only_alerts=only_alerts, alert_types=formatted_alert_types)
+        return AlertCollection(self._api_client,
+                               filter_enabled=filter_enabled,
+                               only_alerts=only_alerts,
+                               alert_types=formatted_alert_types,
+                               start_date=start_date,
+                               end_date=end_date,
+                               id_greater_than=id_greater_than,
+                               username=username,
+                               source=source,
+                               keywords=keywords,
+                               decoy_name=decoy_name)
 
     def export(self, location_with_name):
         """
@@ -1161,7 +1202,9 @@ class EndpointCollection(EditableCollection):
                                      data={
                                          'clean_all_filtered': True,
                                          'username': username,
-                                         'password': password,
+                                         'password': {
+                                             'value': password
+                                         },
                                          'domain': domain,
                                          'run_method': self._get_run_method(install_method),
                                          'install_method': install_method
@@ -1187,7 +1230,9 @@ class EndpointCollection(EditableCollection):
                                      data={
                                          'selected_endpoints_ids': endpoints_ids,
                                          'username': username,
-                                         'password': password,
+                                         'password': {
+                                             'value': password
+                                         },
                                          'domain': domain,
                                          'run_method': self._get_run_method(install_method),
                                          'install_method': install_method
@@ -1229,12 +1274,6 @@ class EndpointCollection(EditableCollection):
         Get the available values for the endpoint filters.
         """
         return self._api_client.api_request(url='{}{}'.format(self._get_url(), 'filter_data/'))
-
-    def status_dashboard(self):
-        """
-        Get a list of all endpoints and their statuses.
-        """
-        return self._api_client.api_request(url='{}{}'.format(self._get_url(), 'status_dashboard/'))
 
     def params(self):
         raise NotImplementedError

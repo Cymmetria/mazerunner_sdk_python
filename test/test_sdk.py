@@ -343,7 +343,11 @@ class TestDecoy(APITest):
 
         # Download decoy:
         download_file_path = "mazerunner/ova_image"
-        ova_decoy.download(location_with_name=download_file_path)
+
+        # Wait until the decoy becomes available and download the file
+        wait_until(ova_decoy.download, location_with_name=download_file_path,
+                   check_return_value=False, exc_list=[ValidationError])
+
         self.file_paths_for_cleanup.append("{}.ova".format(download_file_path))
 
     def test_decoy_update(self):
@@ -504,13 +508,12 @@ class TestDeploymentGroups(APITest):
             os.remove(TEST_DEPLOYMENTS_FILE_PATH)
 
         def _test_auto_deployment():
-            with pytest.raises(ValidationError):
-                dep_group.auto_deploy(username=None,
-                                      password=None,
-                                      install_method='PS_EXEC',
-                                      run_method='EXE_DEPLOY',
-                                      domain='',
-                                      deploy_on="all")
+            dep_group.auto_deploy(username=None,
+                                  password=None,
+                                  install_method='PS_EXEC',
+                                  run_method='EXE_DEPLOY',
+                                  domain='',
+                                  deploy_on="all")
 
             # Since this runs asynchronously and it has nothing to deploy on, we only want to see
             # that the request was accepted
@@ -875,7 +878,7 @@ class TestEndpoints(APITest):
 
             cidr_mapping = self.cidr_mappings.create(
                 cidr_block='%s/30' % self.lab_endpoint_ip,
-                deployment_group_id=1,
+                deployment_group=1,
                 comments='no comments',
                 active=True
             )
@@ -953,7 +956,6 @@ class TestEndpoints(APITest):
             ])
 
             assert isinstance(self.endpoints.filter_data(), dict)
-            assert isinstance(self.endpoints.status_dashboard(), list)
 
         def _test_stop_import():
             _destroy_elements()
@@ -962,7 +964,7 @@ class TestEndpoints(APITest):
 
             self.cidr_mappings.create(
                 cidr_block='%s/24' % self.lab_endpoint_ip,
-                deployment_group_id=1,
+                deployment_group=1,
                 comments='no comments',
                 active=True
             )
@@ -1009,8 +1011,8 @@ class TestEndpoints(APITest):
         for params, expected_error_message in [
             (dict(ip_address='1.1.1.1.1'), "Enter a valid IPv4 address."),
             (dict(dns='A'*256), "Ensure this field has no more than 255 characters."),
-            (dict(hostname='A'*15), "Ensure this field has no more than 15 characters."),
-            (dict(), "require dns or hostname or ip_address"),
+            (dict(hostname='A'*16), "Ensure this field has no more than 15 characters."),
+            (dict(), "You must provide either dns, hostname, or ip address"),
         ]:
             try:
                 self.endpoints.create(**params)
