@@ -144,6 +144,8 @@ class APITest(object):
                     with suppress(ServerError):
                         entity.delete()
 
+        wait_until(self._assert_clean_system, exc_list=[AssertionError], check_return_value=False)
+
     def teardown_method(self, method):
         logger.debug("teardown_method called")
 
