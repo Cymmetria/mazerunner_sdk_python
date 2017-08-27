@@ -781,7 +781,7 @@ class AlertProcessDLL(BaseEntity):
         """
         Download the DLL file to the local disk
 
-        :param destination_path: Location on the disk, where you want to save the file.
+        :param destination_path: Location on the disk where you want to save the file.
         """
         self._api_client.request_and_download(
             url='{url}{download_file_suffix}/'.format(url=self.url,
@@ -825,7 +825,7 @@ class AlertProcess(BaseEntity):
         """
         Download the attacker's tool to your local disk
 
-        :param destination_path: Location on the disk, where you want to save the file.
+        :param destination_path: Location on the disk where you want to save the file.
         """
         self._api_client.request_and_download(
             url='{url}{download_file_suffix}/'.format(url=self.url,
@@ -836,7 +836,7 @@ class AlertProcess(BaseEntity):
         """
         Download minidump of the attacker's process
 
-        :param destination_path: Location on the disk, where you want to save the file.
+        :param destination_path: Location on the disk where you want to save the file.
         """
         self._api_client.request_and_download(
             url='{url}{download_file_suffix}/'.format(url=self.url,
@@ -941,7 +941,7 @@ class Alert(BaseEntity):
         """
         Get a generator of all the processes associated with the alert.
 
-        Supported since MazeRunner 1.7.0.
+        Supported versions: MazeRunner 1.7.0 and above.
         """
         return AlertProcessCollection(api_client=self._api_client, alert=self)
 
@@ -1002,7 +1002,7 @@ class AlertCollection(Collection):
         """
         Get alerts by query.
 
-        :param filter_enabled: When False, the only_alerts and alert_types params will be ignored.
+        :param filter_enabled: When False, all the filtering params will be ignored.
         :param only_alerts: Only take alerts in 'Alert' status (exclude those in 'Mute' and \
         'Ignore' status).
         :param alert_types: A list of alert types.
@@ -1076,7 +1076,7 @@ class AlertCollection(Collection):
 class Endpoint(Entity):
     """
     An endpoint represents a single workstation in the organization, and the status
-    of the breadcrumbs' deployment on it.
+    of the breadcrumbs' deployment to it.
     """
 
     NAME = 'endpoint'
@@ -1131,13 +1131,14 @@ class EndpointCollection(EditableCollection):
 
     def create(self, ip_address=None, dns=None, hostname=None, deployment_group_id=None):
         """
-        Create an Endpoint.
+        Create an endpoint.
 
-        Pass at least one of the following parameters: ip_address, dns, or hostname
-        :param deployment_group_id: id of the deployment group
-        :param ip_address: address of the endpoint
-        :param dns: fqdn of the endpoint
-        :param hostname: hostname of the endpoint
+        Pass at least one of the following parameters: ip_address, dns, or hostname.
+
+        :param deployment_group_id: Id of the deployment group.
+        :param ip_address: Address of the endpoint.
+        :param dns: FQDN of the endpoint.
+        :param hostname: Hostname of the endpoint.
         """
         data = dict(ip_address=ip_address, dns=dns, hostname=hostname, deployment_group=deployment_group_id)
         return self.create_item(data=data)

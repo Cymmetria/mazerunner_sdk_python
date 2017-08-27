@@ -71,6 +71,24 @@ Alerts
    :inherited-members:
    :exclude-members: MODEL_CLASS
 
+.. autoclass:: api_client.AlertProcess
+   :members:
+   :inherited-members:
+
+.. autoclass:: api_client.AlertProcessCollection
+   :members:
+   :inherited-members:
+   :exclude-members: MODEL_CLASS
+
+.. autoclass:: api_client.AlertProcessDLL
+   :members:
+   :inherited-members:
+
+.. autoclass:: api_client.AlertProcessDLLCollection
+   :members:
+   :inherited-members:
+   :exclude-members: MODEL_CLASS
+
 
 Endpoints
 =========
