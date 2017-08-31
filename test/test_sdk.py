@@ -3,10 +3,10 @@ import csv
 import json
 import logging
 import shutil
+from collections import namedtuple
 from stat import S_IRUSR
 
 import pytest
-from contextlib2 import suppress
 from retrying import retry
 from subprocess import Popen
 
@@ -16,7 +16,7 @@ import os
 from mazerunner.api_client import DeploymentGroupCollection, \
     BreadcrumbCollection, ServiceCollection, DecoyCollection, Service, \
     AlertPolicy, CIDRMappingCollection, BackgroundTaskCollection, \
-    EndpointCollection
+    EndpointCollection, Decoy, Breadcrumb, DeploymentGroup, Endpoint, CIDRMapping, BackgroundTask
 from mazerunner.exceptions import ValidationError, ServerError, BadParamError, \
     InvalidInstallMethodError
 from utils import TimeoutException, wait_until
@@ -31,7 +31,17 @@ MAZERUNNER_IP_ADDRESS_PARAM = 'ip_address'
 API_ID_PARAM = 'id'
 API_SECRET_PARAM = 'secret'
 MAZERUNNER_CERTIFICATE_PATH_PARAM = 'mazerunner_certificate_path'
-INITIAL_DEPLOYMENT_GROUPS = 1
+
+ENTITIES_CONFIGURATION = {
+    Decoy: [],
+    Service: [],
+    Breadcrumb: [],
+    DeploymentGroup: [1],
+    Endpoint: [],
+    CIDRMapping: [],
+    BackgroundTask: []
+}
+
 
 TEST_DEPLOYMENTS_FILE_PATH = os.path.join(os.path.dirname(__file__), 'test_deployments/dep.zip')
 TEST_DEPLOYMENTS_FOLDER_PATH = os.path.dirname(TEST_DEPLOYMENTS_FILE_PATH)
@@ -60,10 +70,6 @@ class MachineStatus(object):
 
 # noinspection PyMethodMayBeStatic,PyAttributeOutsideInit
 class APITest(object):
-    DISPOSABLE_TYPES = [
-        DecoyCollection, BreadcrumbCollection, DeploymentGroupCollection,
-        CIDRMappingCollection, BackgroundTaskCollection, EndpointCollection, ServiceCollection
-    ]
 
     runslow = pytest.mark.skipif(not pytest.config.getoption('--runslow'),
                                  reason='--runslow not activated')
@@ -71,13 +77,13 @@ class APITest(object):
                                        reason='--lab_dependent not activated')
 
     def _assert_clean_system(self):
-        assert len(self.decoys) == 0
-        assert len(self.services) == 0
-        assert len(self.breadcrumbs) == 0
-        assert len(self.deployment_groups) == INITIAL_DEPLOYMENT_GROUPS
-        assert len(self.cidr_mappings) == 0
-        assert len(self.endpoints) == 0
-        assert len(self.background_tasks) == 0
+        for entity_collection in self.disposable_entities:
+            existing_ids = {entity.id for entity in entity_collection}
+            expected_ids = set(ENTITIES_CONFIGURATION[entity_collection.MODEL_CLASS])
+
+            assert existing_ids == expected_ids, 'System must be clean before running this test. ' \
+                                                 'Use the --initial_clean flag to do this ' \
+                                                 'automatically'
 
     def _configure_entities_groups(self):
         self.decoys = self.client.decoys
@@ -89,6 +95,16 @@ class APITest(object):
         self.cidr_mappings = self.client.cidr_mappings
         self.endpoints = self.client.endpoints
         self.background_tasks = self.client.background_tasks
+
+        self.disposable_entities = [
+            self.decoys,
+            self.services,
+            self.breadcrumbs,
+            self.deployment_groups,
+            self.endpoints,
+            self.cidr_mappings,
+            self.background_tasks
+        ]
 
     def setup_method(self, method):
         logger.debug("setup_method called")
@@ -112,37 +128,23 @@ class APITest(object):
             certificate=self.mazerunner_certificate_path)
 
         self._configure_entities_groups()
-        self._assert_clean_system()
 
-        self._register_existing_elements()
+        if pytest.config.option.initial_clean:
+            self._destroy_new_entities()
+
+        self._assert_clean_system()
 
         self.file_paths_for_cleanup = []
 
         _clear_deployment_path()
 
-    def _register_existing_elements(self):
-
-        def _get_group_elements(group):
-            return [element.id
-                    for element
-                    in group(self.client)]
-
-        self._existing_elements_by_type = {
-            group: _get_group_elements(group)
-            for group
-            in self.DISPOSABLE_TYPES
-        }
-
     def _destroy_new_entities(self):
-
-        def _get_items(group):
-            return list(group(self.client))
-
-        for entity_group in self.DISPOSABLE_TYPES:
-            for entity in _get_items(entity_group):
-                if entity.id not in self._existing_elements_by_type[entity_group]:
-                    with suppress(ServerError):
-                        entity.delete()
+        for entity_collection in self.disposable_entities:
+            for entity in list(entity_collection):
+                initial_ids = ENTITIES_CONFIGURATION[entity_collection.MODEL_CLASS]
+                if entity.id not in initial_ids:
+                    wait_until(entity.delete, exc_list=[ServerError, ValidationError],
+                               check_return_value=False)
 
         wait_until(self._assert_clean_system, exc_list=[AssertionError], check_return_value=False)
 
@@ -226,11 +228,13 @@ class TestGeneralFlow(APITest):
         logger.debug("test_api_setup_campaign called")
 
         # Create deployment group:
-        assert len(self.deployment_groups) == INITIAL_DEPLOYMENT_GROUPS
+        assert {dg.id for dg in self.deployment_groups} == \
+               set(ENTITIES_CONFIGURATION[DeploymentGroup])
         deployment_group = self.deployment_groups.create(name=SSH_GROUP_NAME,
                                                          description="test deployment group")
         self.assert_entity_name_in_collection(SSH_GROUP_NAME, self.deployment_groups)
-        assert len(self.deployment_groups) == INITIAL_DEPLOYMENT_GROUPS + 1
+        assert {dg.id for dg in self.deployment_groups} == \
+            set(ENTITIES_CONFIGURATION[DeploymentGroup] + [deployment_group.id])
 
         # Create breadcrumb:
         assert len(self.breadcrumbs) == 0
@@ -508,13 +512,6 @@ class TestDeploymentGroups(APITest):
             os.remove(TEST_DEPLOYMENTS_FILE_PATH)
 
         def _test_auto_deployment():
-            dep_group.auto_deploy(username=None,
-                                  password=None,
-                                  install_method='PS_EXEC',
-                                  run_method='EXE_DEPLOY',
-                                  domain='',
-                                  deploy_on="all")
-
             # Since this runs asynchronously and it has nothing to deploy on, we only want to see
             # that the request was accepted
 
