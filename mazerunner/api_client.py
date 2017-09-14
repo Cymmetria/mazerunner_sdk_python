@@ -535,6 +535,7 @@ class DeploymentGroupCollection(EditableCollection):
     """
 
     MODEL_CLASS = DeploymentGroup
+    ALL_BREADCRUMBS_DEPLOYMENT_GROUP_ID = 1
 
     def create(self, name, description=None):
         """
@@ -1118,6 +1119,12 @@ class Endpoint(Entity):
         data = {"selected_endpoints_ids": [self.id]}
         self._api_client.api_request(url, 'post', data=data)
 
+    def reassign_to_group(self, deployment_group):
+        self._api_client.endpoints.reassign_to_group(deployment_group, [self])
+
+    def clear_deployment_group(self):
+        self._api_client.endpoints.clear_deployment_group([self])
+
 
 class EndpointCollection(EditableCollection):
     """
@@ -1127,6 +1134,7 @@ class EndpointCollection(EditableCollection):
     """
 
     MODEL_CLASS = Endpoint
+    UNASSIGN_FROM_DEPLOYMENT_GROUP = 'unassigned'
 
     RUN_METHOD_FOR_INSTALL_METHOD = {
         'ZIP': 'CMD_DEPLOY',
@@ -1196,6 +1204,21 @@ class EndpointCollection(EditableCollection):
         data = dict(
             to_group=deployment_group.id,
             selected_endpoints_ids=[e.id for e in endpoints])
+
+        self._api_client.api_request(
+            "{}{}".format(self._get_url(), 'reassign_selected/'),
+            method='POST',
+            data=data)
+
+    def clear_deployment_group(self, endpoints):
+        """
+        Unassign specified endpoints from all deployment groups.
+
+        :param endpoints: A list of endpoints that should be unassigned.
+        """
+        data = dict(
+            to_group=self.UNASSIGN_FROM_DEPLOYMENT_GROUP,
+            selected_endpoints_ids=[ep.id for ep in endpoints])
 
         self._api_client.api_request(
             "{}{}".format(self._get_url(), 'reassign_selected/'),

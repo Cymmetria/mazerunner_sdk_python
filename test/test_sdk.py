@@ -940,7 +940,29 @@ class TestEndpoints(APITest):
 
         def _test_reassignment(ep):
             dep_group = self.deployment_groups.create(name='ep1_test', description='test')
+
+            # Assign via collection
             self.endpoints.reassign_to_group(dep_group, [ep])
+            assert self.endpoints.get_item(ep.id).deployment_group.id == dep_group.id
+
+            # Clear via collection
+            self.endpoints.clear_deployment_group([ep])
+            assert self.endpoints.get_item(ep.id).deployment_group is None
+
+            # Assign via entity
+            all_breadcrumbs_deployment_group = self.deployment_groups.get_item(
+                self.deployment_groups.ALL_BREADCRUMBS_DEPLOYMENT_GROUP_ID)
+            endpoint.reassign_to_group(all_breadcrumbs_deployment_group)
+            assert self.endpoints.get_item(ep.id).deployment_group.id == \
+                   all_breadcrumbs_deployment_group.id
+
+            # Clear via entity
+            ep.clear_deployment_group()
+            assert self.endpoints.get_item(ep.id).deployment_group is None
+
+            # Eventually leave the endpoint with the new deployment group assigned
+            ep.reassign_to_group(dep_group)
+            assert self.endpoints.get_item(ep.id).deployment_group.id == dep_group.id
 
         def _test_delete():
             self.endpoints.filter('no.such.endpoints').delete_filtered()
