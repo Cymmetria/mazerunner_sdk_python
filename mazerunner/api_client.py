@@ -1073,6 +1073,30 @@ class AlertCollection(Collection):
                                      query_params=query_params)
 
 
+class ForensicPullerOnDemand(BaseCollection):
+    """
+    Forensic Puller on demand.
+
+    This entity will be returned by :py:attr:`api_client.APIClient.forensic_puller_on_demand`.
+    """
+    URL_EXTENSION = 'forensic-puller-on-demand-run'
+
+    def run_on_ip_list(self, ip_list):
+        """
+        Runs Forensic Puller on a list of IPs.
+
+        :param ip_list: List of IPs.
+        """
+        data = dict(ip_list=ip_list)
+        self._api_client.api_request(
+            url=self._get_url(),
+            method='post',
+            data=data)
+
+    def _get_url(self):
+        return self._api_client.api_urls[self.URL_EXTENSION]
+
+
 class Endpoint(Entity):
     """
     An endpoint represents a single workstation in the organization, and the status
@@ -1724,6 +1748,19 @@ class APIClient(object):
             code_alerts = client.alerts.filter(alert_types=['code'])
         """
         return AlertCollection(self)
+
+    @property
+    def forensic_puller_on_demand(self):
+        """
+        Get an :class:`api_client.ForensicPullerOnDemand` instance, on which you can
+        perform read and delete operations.
+
+        Example::
+
+            client = mazerunner.connect(...)
+            code_alerts = client.forensic_puller_on_demand.run_on_ip_list(ip_list=['192.168.1.1'])
+        """
+        return ForensicPullerOnDemand(self)
 
     @property
     def endpoints(self):

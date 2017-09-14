@@ -26,6 +26,7 @@ ENDPOINT_USERNAME_PARAM = 'endpoint_username'
 ENDPOINT_PASSWORD_PARAM = 'endpoint_password'
 
 CODE_EXECUTION_ALERT_TYPE = 'code'
+FORENSIC_DATA_ALERT_TYPE = 'forensic_puller'
 
 MAZERUNNER_IP_ADDRESS_PARAM = 'ip_address'
 API_ID_PARAM = 'id'
@@ -533,6 +534,19 @@ class TestDeploymentGroups(APITest):
 
         _test_manual_deployment()
         _test_auto_deployment()
+
+    def forensic_puller_alert_is_shown(self):
+        alerts = list(self.alerts.filter(filter_enabled=True,
+                                         only_alerts=False,
+                                         alert_types=[FORENSIC_DATA_ALERT_TYPE]))
+        return bool(alerts)
+
+    @pytest.mark.skip("needs auto deploy setting credentials")
+    @APITest.lab_dependent
+    def test_forensic_puller_on_demand(self):
+        ## TODO: Add setting global deployment credentials here.
+        self.client.forensic_puller_on_demand.run_on_ip_list(ip_list=[self.lab_endpoint_ip])
+        wait_until(self.forensic_puller_alert_is_shown)
 
     @APITest.lab_dependent
     def test_deployment_credentials(self):
