@@ -21,6 +21,8 @@ from mazerunner.exceptions import ValidationError, ServerError, BadParamError, \
     InvalidInstallMethodError
 from utils import TimeoutException, wait_until
 
+CLEAR_SYSTEM_ERROR_MESSAGE = 'System must be clean before running this test. Use the '\
+                             '--initial_clean flag to do this automatically'
 ENDPOINT_IP_PARAM = 'endpoint_ip'
 ENDPOINT_USERNAME_PARAM = 'endpoint_username'
 ENDPOINT_PASSWORD_PARAM = 'endpoint_password'
@@ -82,9 +84,9 @@ class APITest(object):
             existing_ids = {entity.id for entity in entity_collection}
             expected_ids = set(ENTITIES_CONFIGURATION[entity_collection.MODEL_CLASS])
 
-            assert existing_ids == expected_ids, 'System must be clean before running this test. ' \
-                                                 'Use the --initial_clean flag to do this ' \
-                                                 'automatically'
+            assert existing_ids == expected_ids, CLEAR_SYSTEM_ERROR_MESSAGE
+
+        assert len(self.background_tasks) == 0, CLEAR_SYSTEM_ERROR_MESSAGE
 
     def _configure_entities_groups(self):
         self.decoys = self.client.decoys
@@ -103,8 +105,7 @@ class APITest(object):
             self.breadcrumbs,
             self.deployment_groups,
             self.endpoints,
-            self.cidr_mappings,
-            self.background_tasks
+            self.cidr_mappings
         ]
 
     def setup_method(self, method):
@@ -146,6 +147,8 @@ class APITest(object):
                 if entity.id not in initial_ids:
                     wait_until(entity.delete, exc_list=[ServerError, ValidationError],
                                check_return_value=False)
+
+        self.background_tasks.acknowledge_all_complete()
 
         wait_until(self._assert_clean_system, exc_list=[AssertionError], check_return_value=False)
 
