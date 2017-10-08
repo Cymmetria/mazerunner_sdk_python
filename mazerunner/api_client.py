@@ -1094,6 +1094,23 @@ class ForensicPullerOnDemand(BaseCollection):
             method='post',
             data=data)
 
+
+class StorageUsageData(BaseCollection):
+    """
+    Storage usage data.
+    This entity will be returned by :py:attr:`api_client.APIClient.storage_usage_data`.
+    """
+    URL_EXTENSION = 'storage-usage'
+
+    def __unicode__(self):
+        return unicode(self.details())
+
+    def __str__(self):
+        return str(self.details())
+
+    def details(self):
+        return self._api_client.api_request(url=self._get_url(), method='get')
+
     def _get_url(self):
         return self._api_client.api_urls[self.URL_EXTENSION]
 
@@ -1784,6 +1801,13 @@ class APIClient(object):
             code_alerts = client.forensic_puller_on_demand.run_on_ip_list(ip_list=['192.168.1.1'])
         """
         return ForensicPullerOnDemand(self)
+
+    @property
+    def storage_usage(self):
+        """
+        Get an :class:`api_client.StorageUsageData`
+        """
+        return StorageUsageData(self)
 
     @property
     def endpoints(self):
