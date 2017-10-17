@@ -252,7 +252,7 @@ class TestGeneralFlow(APITest):
 
         # Create service:
         assert len(self.services) == 0
-        service_ssh = self.services.create(name=SSH_SERVICE_NAME, service_type="ssh")
+        service_ssh = self.services.create(name=SSH_SERVICE_NAME, service_type="ssh", any_user="false")
         self.assert_entity_name_in_collection(SSH_SERVICE_NAME, self.services)
         assert len(self.services) == 1
 
@@ -318,7 +318,7 @@ class TestGeneralFlow(APITest):
         self.assert_entity_name_in_collection(SSH_GROUP_NAME, self.deployment_groups)
         self.assert_entity_name_not_in_collection(SSH_GROUP_NAME_UPDATE, self.deployment_groups)
 
-        service_ssh.update(name=SSH_SERVICE_NAME_UPDATE)
+        service_ssh.update(name=SSH_SERVICE_NAME_UPDATE, any_user="false")
 
         breadcrumb_ssh.detach_from_service(service_ssh.id)
         self.assert_entity_name_not_in_collection(SSH_SERVICE_NAME,
@@ -437,7 +437,7 @@ class TestDeploymentGroups(APITest):
                                            hostname="decoyssh",
                                            os="Ubuntu_1404",
                                            vm_type="KVM"))
-        service_ssh = self.services.create(name=SSH_SERVICE_NAME, service_type="ssh")
+        service_ssh = self.services.create(name=SSH_SERVICE_NAME, service_type="ssh", any_user="false")
         service_ssh.connect_to_decoy(decoy_ssh.id)
 
         dep_group = self.deployment_groups.create(name='test_check_conflicts')
@@ -482,7 +482,7 @@ class TestDeploymentGroups(APITest):
                                            os="Ubuntu_1404",
                                            vm_type="KVM"))
 
-        service_ssh = self.services.create(name=SSH_SERVICE_NAME, service_type="ssh")
+        service_ssh = self.services.create(name=SSH_SERVICE_NAME, service_type="ssh", any_user="false")
 
         bc_ssh = self.breadcrumbs.create(name='ssh1',
                                          breadcrumb_type="ssh",
@@ -672,7 +672,7 @@ class TestAlert(APITest):
                                                hostname="decoyssh",
                                                os="Ubuntu_1404",
                                                vm_type="KVM"))
-            service_ssh = self.services.create(name=SSH_SERVICE_NAME, service_type="ssh")
+            service_ssh = self.services.create(name=SSH_SERVICE_NAME, service_type="ssh", any_user="false")
             service_ssh.connect_to_decoy(decoy_ssh.id)
 
             bc_ssh1 = self.breadcrumbs.create(name='ssh1',
@@ -750,16 +750,16 @@ class TestAlert(APITest):
 
 class TestEntity(APITest):
     def test_repr(self):
-        service = self.services.create(name=SSH_SERVICE_NAME, service_type="ssh")
+        service = self.services.create(name=SSH_SERVICE_NAME, service_type="ssh", any_user="false")
 
         str_service = "<Service: available_decoys=[] name=u'ssh_service' service_type_name=u'SSH' " \
                       "url=u'https://{serv}/api/v1.0/service/{service_id}/' " \
-                      "attached_decoys=[] is_active=False service_type=u'ssh' id={service_id}>".format(
-                          serv=self.mazerunner_ip_address, service_id=service.id)
+                      "is_active=False attached_decoys=[] any_user=u'{any_user}' service_type=u'ssh' id={service_id}>"\
+            .format(serv=self.mazerunner_ip_address, service_id=service.id, any_user=service.any_user)
         assert str(service) == str_service
 
     def test_get_attribute(self):
-        service = self.services.create(name=SSH_SERVICE_NAME, service_type="ssh")
+        service = self.services.create(name=SSH_SERVICE_NAME, service_type="ssh", any_user="false")
         assert service.name == SSH_SERVICE_NAME
 
         with pytest.raises(AttributeError):
