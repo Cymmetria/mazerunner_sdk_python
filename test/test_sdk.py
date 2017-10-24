@@ -3,7 +3,6 @@ import csv
 import json
 import logging
 import shutil
-from collections import namedtuple
 from stat import S_IRUSR
 
 import pytest
@@ -13,10 +12,8 @@ from subprocess import Popen
 import mazerunner
 import os
 
-from mazerunner.api_client import DeploymentGroupCollection, \
-    BreadcrumbCollection, ServiceCollection, DecoyCollection, Service, \
-    AlertPolicy, CIDRMappingCollection, BackgroundTaskCollection, \
-    EndpointCollection, Decoy, Breadcrumb, DeploymentGroup, Endpoint, CIDRMapping, BackgroundTask
+from mazerunner.api_client import Service, AlertPolicy, Decoy, Breadcrumb, \
+    DeploymentGroup, Endpoint, CIDRMapping, BackgroundTask
 from mazerunner.exceptions import ValidationError, ServerError, BadParamError, \
     InvalidInstallMethodError
 from utils import TimeoutException, wait_until
@@ -497,6 +494,13 @@ class TestDeploymentGroups(APITest):
 
         self.power_on_decoy(decoy_ssh)
 
+        def _has_complete_bg_tasks():
+            return len([bg_task for bg_task in self.background_tasks.filter(running=False)]) > 0
+
+        def _wait_and_destroy_background_task():
+            wait_until(_has_complete_bg_tasks, check_return_value=True)
+            self.background_tasks.acknowledge_all_complete()
+
         def _test_manual_deployment():
             dep_group.deploy(location_with_name=TEST_DEPLOYMENTS_FILE_PATH.replace('.zip', ''),
                              os='Windows',
@@ -526,6 +530,8 @@ class TestDeploymentGroups(APITest):
                                   domain='',
                                   deploy_on="all")
 
+            _wait_and_destroy_background_task()
+
             self.deployment_groups.auto_deploy_groups(
                 username='some-user',
                 password='some-pass',
@@ -534,6 +540,8 @@ class TestDeploymentGroups(APITest):
                 run_method='EXE_DEPLOY',
                 domain='',
                 deploy_on="all")
+
+            _wait_and_destroy_background_task()
 
         _test_manual_deployment()
         _test_auto_deployment()
