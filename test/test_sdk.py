@@ -351,7 +351,7 @@ class TestDecoy(APITest):
 
         # Wait until the decoy becomes available and download the file
         wait_until(ova_decoy.download, location_with_name=download_file_path,
-                   check_return_value=False, exc_list=[ValidationError])
+                   check_return_value=False, exc_list=[ValidationError], total_timeout=60*10)
 
         self.file_paths_for_cleanup.append("{}.ova".format(download_file_path))
 
