@@ -328,6 +328,11 @@ class TestGeneralFlow(APITest):
         decoy_ssh.load()
         assert decoy_ssh.machine_status == MachineStatus.INACTIVE
 
+        invalid_service = "invalid_service"
+        with pytest.raises(ValidationError):
+            self.services.create(name=invalid_service, service_type=invalid_service)
+        self.assert_entity_name_not_in_collection(invalid_service, self.services)
+
 
 class TestDecoy(APITest):
     DECOY_STATUS_ACTIVE = 'active'
