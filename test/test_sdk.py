@@ -820,7 +820,8 @@ class TestService(APITest):
         self.services.create(name=SSH_BREADCRUMB_NAME,
                              service_type="http",
                              zip_file_path=site_data_file,
-                             web_apps=['phpmyadmin'])
+                             web_apps=['phpmyadmin'],
+                             https_active=False)
 
         assert len(self.client.services) == 1
 
