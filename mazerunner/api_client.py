@@ -227,13 +227,14 @@ class Decoy(Entity):
             ec2_region=self.ec2_region,
             ec2_subnet_id=self.ec2_subnet_id,
             vlan=self.vlan,
-            chosen_interface=self.chosen_interface,
+            interface=self.interface,
             name=name,
             chosen_static_ip=chosen_static_ip,
             chosen_subnet=chosen_subnet,
             chosen_gateway=chosen_gateway,
             chosen_dns=chosen_dns,
-            dns_address=dns_address
+            dns_address=dns_address,
+            network_type=self.network_type
         )
         non_empty_data = {key: value for key, value in data.iteritems() if value}
         self._update_item(non_empty_data)
@@ -293,11 +294,13 @@ class DecoyCollection(EditableCollection):
     MODEL_CLASS = Decoy
 
     def create(self, os, vm_type, name, hostname, chosen_static_ip=None, chosen_subnet=None,
-               chosen_gateway=None, chosen_dns=None, chosen_interface=None, vlan=None,
-               ec2_region=None, ec2_subnet_id=None, account=None, dns_address=''):
+               chosen_gateway=None, chosen_dns=None, interface=1, vlan=None,
+               ec2_region=None, ec2_subnet_id=None, account=None, dns_address='', network_type="PROMISC"):
         """
         Create a decoy.
 
+        :param network_type: Network type of the decoy. Options : \
+        PROMISC, NON_PROMISC, VLAN_TRUNK
         :param os: OS installed on the server. Options: \
         Ubuntu_1404, Windows_7, Windows_Server_2012, Windows_Server_2008.
         :param vm_type: Server type. KVM for nested (recommended) or OVA for standalone.
@@ -308,8 +311,7 @@ class DecoyCollection(EditableCollection):
         :param chosen_subnet: Decoy subnet mask.
         :param chosen_gateway: Decoy default gateway address.
         :param chosen_dns: The DNS server address (This is NOT the name of the decoy).
-        :param chosen_interface: The physical interface to which the decoy should be connected. \
-        Applicable for non-promiscuous mode only.
+        :param interface: The physical interface to which the decoy should be connected. \
         :param vlan: VLAN to which the decoy will be connected (if applicable).
         :param ec2_region: EC2 region (e.g., eu-west-1), if applicable.
         :param ec2_subnet_id: EC2 subnet ID, if applicable.
@@ -326,12 +328,13 @@ class DecoyCollection(EditableCollection):
             chosen_subnet=chosen_subnet,
             chosen_gateway=chosen_gateway,
             chosen_dns=chosen_dns,
-            chosen_interface=chosen_interface,
+            interface=interface,
             vlan=vlan,
             ec2_region=ec2_region,
             ec2_subnet_id=ec2_subnet_id,
             account=account,
-            dns_address=dns_address
+            dns_address=dns_address,
+            network_type=network_type
         )
         non_empty_data = {key: value for key, value in data.iteritems() if value}
         return self.create_item(non_empty_data)
