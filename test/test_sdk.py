@@ -767,7 +767,8 @@ class TestEntity(APITest):
 
         str_service = "<Service: available_decoys=[] name=u'ssh_service' service_type_name=u'SSH' " \
                       "url=u'https://{serv}/api/v1.0/service/{service_id}/' " \
-                      "is_active=False attached_decoys=[] any_user=u'{any_user}' service_type=u'ssh' id={service_id}>"\
+                      "is_active=False attached_decoys=[] any_user=u'{any_user}' is_delete_enabled=True " \
+                      "service_type=u'ssh' id={service_id}>"\
             .format(serv=self.mazerunner_ip_address, service_id=service.id, any_user=service.any_user)
         assert str(service) == str_service
 
