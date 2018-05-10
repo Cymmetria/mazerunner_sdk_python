@@ -1062,7 +1062,7 @@ class TestEndpoints(APITest):
         for params, expected_error_message in [
             (dict(ip_address='1.1.1.1.1'), "Enter a valid IPv4 address."),
             (dict(dns='A'*256), "Maximum field length is 255 characters"),
-            (dict(hostname='A'*16), "Ensure this field has no more than 15 characters."),
+            (dict(hostname='A'*16), "Maximum field length is 15 characters"),
             (dict(), "You must provide either dns, hostname, or ip address"),
         ]:
             try:
