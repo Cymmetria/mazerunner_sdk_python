@@ -1725,8 +1725,8 @@ class APIClient(object):
             backup_server_story_decoy = client.decoys.create(
                 name='backup_server_decoy',
                 os='Windows_Server_2012',
-                hostname: 'backup_server',
-                vm_type: "KVM")
+                hostname='backupserver',
+                vm_type='KVM')
 
             old_decoy = client.decoys.get_item(id=5)
             old_decoy.delete()
@@ -1744,7 +1744,7 @@ class APIClient(object):
             client = mazerunner.connect(...)
             app_db_service = client.services.create(
                 name='app_db_service',
-                type='mysql')
+                service_type='mysql')
         """
         return ServiceCollection(self)
 
