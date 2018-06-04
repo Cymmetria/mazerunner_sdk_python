@@ -28,7 +28,7 @@ class Collection(BaseCollection):
     def __len__(self):
         query_params = self._get_query_params()
         response = self._api_client.api_request(self._get_url(), query_params=query_params)
-        return response['count']
+        return response["count"]
 
     def __iter__(self):
         for chunk in self._iter_chunks():
@@ -38,14 +38,14 @@ class Collection(BaseCollection):
     def _iter_chunks(self):
         query_params = self._get_query_params()
         response = self._api_client.api_request(self._get_url(), query_params=query_params)
-        results = response['results']
+        results = response["results"]
         while True:
             yield [self._obj_class(self._api_client, obj) for obj in results]
 
             # Get the next batch of objects if possible
-            if response.get('next'):
-                response = self._api_client.api_request(response['next'], query_params=query_params)
-                results = response['results']
+            if response.get("next"):
+                response = self._api_client.api_request(response["next"], query_params=query_params)
+                results = response["results"]
             else:
                 return
 
@@ -85,7 +85,7 @@ class EditableCollection(Collection):
         :param data: Element data.
         :param files: Relevant file paths to upload for the element.
         """
-        response = self._api_client.api_request(self._get_url(), 'post', data=data, files=files)
+        response = self._api_client.api_request(self._get_url(), "post", data=data, files=files)
         return self._obj_class(self._api_client, response).load()
 
 
@@ -135,10 +135,10 @@ class BaseEntity(object):
         self._update_related_fields()
 
     def __repr__(self):
-        properties = ' '.join('%s=%s' % (key, repr(value))
+        properties = " ".join("%s=%s" % (key, repr(value))
                               for key, value
                               in self._param_dict.items())
-        return '<%s: %s>' % (self.__class__.__name__, properties)
+        return "<%s: %s>" % (self.__class__.__name__, properties)
 
     def _update_related_fields(self):
         for key, field_type in self.RELATED_COLLECTIONS.iteritems():
@@ -176,14 +176,14 @@ class BaseEntity(object):
 
 class Entity(BaseEntity):
     def _update_item(self, data, files=None):
-        response = self._api_client.api_request(self.url, 'put', data=data, files=files)
+        response = self._api_client.api_request(self.url, "put", data=data, files=files)
         self._update_entity_data(response)
 
     def _partial_update_item(self, data, files=None):
         non_empty_data = {key: value for key, value in data.iteritems() if value}
         if non_empty_data:
             response = self._api_client.api_request(url=self.url,
-                                                    method='patch',
+                                                    method="patch",
                                                     data=non_empty_data,
                                                     files=files)
             self._update_entity_data(response)
@@ -192,7 +192,7 @@ class Entity(BaseEntity):
         """
         Delete this element.
         """
-        self._api_client.api_request(self.url, 'delete')
+        self._api_client.api_request(self.url, "delete")
 
 
 class Decoy(Entity):
@@ -203,10 +203,10 @@ class Decoy(Entity):
     or an external machine downloaded as an OVA and manually deployed on an ESX machine.
     """
 
-    NAME = 'decoy'
+    NAME = "decoy"
 
     def update(self, name, chosen_static_ip=None, chosen_subnet=None, chosen_gateway=None,
-               chosen_dns=None, dns_address=''):
+               chosen_dns=None, dns_address=""):
         """
         Change decoy configuration.
 
@@ -243,26 +243,26 @@ class Decoy(Entity):
         """
         Start the decoy machine.
         """
-        self._api_client.api_request("{}{}".format(self.url, 'power_on/'), 'post')
+        self._api_client.api_request("{}{}".format(self.url, "power_on/"), "post")
 
     def recreate(self):
         """
         Recreate the decoy machine.
         """
-        self._api_client.api_request("{}{}".format(self.url, 'recreate/'), 'post')
+        self._api_client.api_request("{}{}".format(self.url, "recreate/"), "post")
 
     def power_off(self):
         """
         Shut down the decoy machine.
         """
-        self._api_client.api_request("{}{}".format(self.url, 'power_off/'), 'post')
+        self._api_client.api_request("{}{}".format(self.url, "power_off/"), "post")
 
     def test_dns(self):
         """
         Check whether the decoy is properly registered in the DNS server.
         """
         try:
-            return self._api_client.api_request("{}{}".format(self.url, 'test_dns/'), 'post')
+            return self._api_client.api_request("{}{}".format(self.url, "test_dns/"), "post")
         except ValidationError as e:
             data = json.loads(e.message)
             errors = data.get("non_field_errors", [])
@@ -276,12 +276,8 @@ class Decoy(Entity):
 
         :param location_with_name: Destination path.
         """
-        response = self._api_client.api_request("{}{}".format(self.url, 'download/'), stream=True)
-
-        file_path = "{}.{}".format(location_with_name, "ova")
-        with open(file_path, 'wb') as f:
-            response.raw.decode_content = True
-            shutil.copyfileobj(response.raw, f)
+        self._api_client.request_and_download(url="{}{}".format(self.url, "download/"),
+                                              destination_path="{}.{}".format(location_with_name, "ova"))
 
 
 class DecoyCollection(EditableCollection):
@@ -295,7 +291,7 @@ class DecoyCollection(EditableCollection):
 
     def create(self, os, vm_type, name, hostname, chosen_static_ip=None, chosen_subnet=None,
                chosen_gateway=None, chosen_dns=None, interface=1, vlan=None,
-               ec2_region=None, ec2_subnet_id=None, account=None, dns_address='', network_type="PROMISC"):
+               ec2_region=None, ec2_subnet_id=None, account=None, dns_address="", network_type="PROMISC"):
         """
         Create a decoy.
 
@@ -353,11 +349,11 @@ class Service(Entity):
         * Remote desktop
     """
 
-    NAME = 'service'
+    NAME = "service"
 
     RELATED_COLLECTIONS = {
-        'attached_decoys': Decoy,
-        'available_decoys': Decoy
+        "attached_decoys": Decoy,
+        "available_decoys": Decoy
     }
 
     def update(self, name, zip_file_path=None, **kwargs):
@@ -368,7 +364,7 @@ class Service(Entity):
         :param zip_file_path: A file to upload, if applicable.
         :param kwargs: Additional relevant parameters.
         """
-        files = {"zip_file": open(zip_file_path, 'rb')} if zip_file_path else None
+        files = {"zip_file": open(zip_file_path, "rb")} if zip_file_path else None
         data = dict(
             name=name,
             service_type=self.service_type
@@ -383,8 +379,8 @@ class Service(Entity):
         :param decoy_id: The ID of the decoy to which the service should be attached.
         """
         data = dict(decoy_id=decoy_id)
-        self._api_client.api_request(url="{}{}".format(self.url, 'connect_to_decoy/'),
-                                     method='post',
+        self._api_client.api_request(url="{}{}".format(self.url, "connect_to_decoy/"),
+                                     method="post",
                                      data=data)
         self.load()
 
@@ -395,8 +391,8 @@ class Service(Entity):
         :param decoy_id: Decoy ID from which the service should be detached.
         """
         data = dict(decoy_id=decoy_id)
-        self._api_client.api_request(url="{}{}".format(self.url, 'detach_from_decoy/'),
-                                     method='post',
+        self._api_client.api_request(url="{}{}".format(self.url, "detach_from_decoy/"),
+                                     method="post",
                                      data=data)
         self.load()
 
@@ -420,7 +416,7 @@ class ServiceCollection(EditableCollection):
         :param zip_file_path: The path of a ZIP file to upload, if applicable.
         :param kwargs: Additional relevant parameters.
         """
-        files = {"zip_file": open(zip_file_path, 'rb')} if zip_file_path else None
+        files = {"zip_file": open(zip_file_path, "rb")} if zip_file_path else None
         data = dict(
             name=name,
             service_type=service_type
@@ -443,7 +439,7 @@ class DeploymentGroup(Entity):
     the deployment group's associated breadcrumbs on the deployment group's associated endpoints.
     """
 
-    NAME = 'deployment-group'
+    NAME = "deployment-group"
 
     def update(self, name, description):
         """
@@ -481,7 +477,7 @@ class DeploymentGroup(Entity):
         :param os: OS type (Windows/Linux).
         """
         query_dict = dict(os=os)
-        return self._api_client.api_request(url="{}{}".format(self.url, 'check_conflicts/'),
+        return self._api_client.api_request(url="{}{}".format(self.url, "check_conflicts/"),
                                             query_params=query_dict)
 
     def deploy(self, location_with_name, os, download_type, download_format="ZIP"):
@@ -494,16 +490,12 @@ class DeploymentGroup(Entity):
         :param download_format: Installer format (ZIP/MSI/EXE).
         """
         query_dict = dict(os=os, download_type=download_type, download_format=download_format)
-        response = self._api_client.api_request(
-            "{}{}".format(self.url, 'deploy/'),
-            query_params=query_dict, stream=True)
-
         file_path = "{}.{}".format(location_with_name, download_format.lower())
-        with open(file_path, 'wb') as f:
-            response.raw.decode_content = True
-            shutil.copyfileobj(response.raw, f)
+        self._api_client.request_and_download(url="{}{}".format(self.url, "deploy/"),
+                                              destination_path=file_path,
+                                              query_params=query_dict)
 
-    def auto_deploy(self, install_method, run_method, username, password, domain='',
+    def auto_deploy(self, install_method, run_method, username, password, domain="",
                     deploy_on="all"):
         """
         Deploy all the breadcrumbs that are members of this deployment group on all the endpoints
@@ -527,7 +519,7 @@ class DeploymentGroup(Entity):
             domain=domain,
             deploy_on=deploy_on
         )
-        self._api_client.api_request("{}{}".format(self.url, 'auto_deploy/'), 'post', data=data)
+        self._api_client.api_request("{}{}".format(self.url, "auto_deploy/"), "post", data=data)
 
 
 class DeploymentGroupCollection(EditableCollection):
@@ -577,7 +569,7 @@ class DeploymentGroupCollection(EditableCollection):
         )
         return self._api_client.api_request(url="{}{}".format(self._get_url(),
                                                               "test_deployment_credentials/"),
-                                            method='post', data=data)
+                                            method="post", data=data)
 
     def auto_deploy_groups(self, deployment_groups_ids, install_method, run_method,
                            username, password, domain=None, deploy_on="all"):
@@ -605,9 +597,9 @@ class DeploymentGroupCollection(EditableCollection):
             domain=domain,
             deploy_on=deploy_on
         )
-        url = "{}{}/".format(self._get_url(), 'deploy')
+        url = "{}{}/".format(self._get_url(), "deploy")
         return self._api_client.api_request(url=url,
-                                            method='post',
+                                            method="post",
                                             data=data)
 
     def deploy_all(self, location_with_name, os, download_format="ZIP"):
@@ -618,16 +610,10 @@ class DeploymentGroupCollection(EditableCollection):
         :param os: OS for which the installation is intended.
         :param download_format: Installer format (ZIP/MSI/EXE).
         """
-        query_dict = dict(os=os, download_format=download_format)
-        response = self._api_client.api_request(
-            url="{}{}".format(self._get_url(), 'deploy_all/'),
-            query_params=query_dict,
-            stream=True)
-
         file_path = "{}.{}".format(location_with_name, download_format.lower())
-        with open(file_path, 'wb') as f:
-            response.raw.decode_content = True
-            shutil.copyfileobj(response.raw, f)
+        self._api_client.request_and_download(url="{}{}".format(self._get_url(), "deploy_all/"),
+                                              destination_path=file_path,
+                                              query_params=dict(os=os, download_format=download_format))
 
     def params(self):
         raise NotImplementedError
@@ -657,12 +643,12 @@ class Breadcrumb(Entity):
         - A cookie with a session token, stored in the endpoint's browser.
     """
 
-    NAME = 'breadcrumb'
+    NAME = "breadcrumb"
 
     RELATED_COLLECTIONS = {
-        'attached_services': Service,
-        'available_services': Service,
-        'deployment_groups': DeploymentGroup
+        "attached_services": Service,
+        "available_services": Service,
+        "deployment_groups": DeploymentGroup
     }
 
     def update(self, name, **kwargs):
@@ -687,8 +673,8 @@ class Breadcrumb(Entity):
         :param service_id: The service ID to which the breadcrumb should be attached.
         """
         data = dict(service_id=service_id)
-        self._api_client.api_request(url="{}{}".format(self.url, 'connect_to_service/'),
-                                     method='post',
+        self._api_client.api_request(url="{}{}".format(self.url, "connect_to_service/"),
+                                     method="post",
                                      data=data)
         self.load()
 
@@ -699,8 +685,8 @@ class Breadcrumb(Entity):
         :param service_id: Service ID from which the breadcrumbs should be detached.
         """
         data = dict(service_id=service_id)
-        self._api_client.api_request(url="{}{}".format(self.url, 'detach_from_service/'),
-                                     method='post',
+        self._api_client.api_request(url="{}{}".format(self.url, "detach_from_service/"),
+                                     method="post",
                                      data=data)
         self.load()
 
@@ -714,14 +700,10 @@ class Breadcrumb(Entity):
         :param download_format: Installer format (ZIP/EXE/MSI).
         """
         query_dict = dict(os=os, download_type=download_type, download_format=download_format)
-        response = self._api_client.api_request(
-            "{}{}".format(self.url, 'deploy/'),
-            query_params=query_dict, stream=True)
-
         file_path = "{}.{}".format(location_with_name, download_format.lower())
-        with open(file_path, 'wb') as f:
-            response.raw.decode_content = True
-            shutil.copyfileobj(response.raw, f)
+        self._api_client.request_and_download(url="{}{}".format(self.url, "deploy/"),
+                                              destination_path=file_path,
+                                              query_params=query_dict)
 
     def add_to_group(self, deployment_group_id):
         """
@@ -731,10 +713,10 @@ class Breadcrumb(Entity):
         """
 
         if not isinstance(deployment_group_id, Number):
-            raise BadParamError('deployment_group_id must be a number')
+            raise BadParamError("deployment_group_id must be a number")
 
         data = dict(deployment_group_id=deployment_group_id)
-        self._api_client.api_request("{}{}".format(self.url, 'add_to_group/'), 'post', data=data)
+        self._api_client.api_request("{}{}".format(self.url, "add_to_group/"), "post", data=data)
         self.load()
 
     def remove_from_group(self, deployment_group_id):
@@ -744,10 +726,19 @@ class Breadcrumb(Entity):
         :param deployment_group_id: Deployment group ID from which the breadcrumb should be removed.
         """
         data = dict(deployment_group_id=deployment_group_id)
-        self._api_client.api_request(url="{}{}".format(self.url, 'remove_from_group/'),
-                                     method='post',
+        self._api_client.api_request(url="{}{}".format(self.url, "remove_from_group/"),
+                                     method="post",
                                      data=data)
         self.load()
+
+    def download_breadcrumb_honeydoc(self, location_with_name):
+        """
+        Download the HoneyDoc file for this breadcrumb (for HoneyDoc breadcrumbs only).
+
+        :param location_with_name: Destination path.
+        """
+        self._api_client.request_and_download(url="{}{}".format(self.url, "download_breadcrumb_honeydoc/"),
+                                              destination_path=location_with_name)
 
 
 class BreadcrumbCollection(EditableCollection):
@@ -759,22 +750,26 @@ class BreadcrumbCollection(EditableCollection):
 
     MODEL_CLASS = Breadcrumb
 
-    def create(self, name, breadcrumb_type, **kwargs):
+    def create(self, name, breadcrumb_type, file_field_name=None, file_path=None, **kwargs):
         """
         Create a new breadcrumb.
 
         :param name: An internal name for the breadcrumb.
         :param breadcrumb_type: The type of breadcrumb. See options for a list \
         of available breadcrumb types.
+        :param file_field_name: For breadcrumbs requiring a file, the name of the
+        breadcrumb field expected to contain the file content.
+        :param file_path: For breadcrumbs requiring a file, the path to the file to upload.
         :param kwargs: Other parameters relevant for the desired breadcrumb type. See options \
         for more information.
         """
+        files = {file_field_name: open(file_path, "rb")} if file_field_name else None
         data = dict(
             name=name,
             breadcrumb_type=breadcrumb_type
         )
         data.update(kwargs)
-        return self.create_item(data)
+        return self.create_item(data, files=files)
 
 
 class AlertProcessDLL(BaseEntity):
@@ -788,8 +783,8 @@ class AlertProcessDLL(BaseEntity):
         :param destination_path: Location on the disk where you want to save the file.
         """
         self._api_client.request_and_download(
-            url='{url}{download_file_suffix}/'.format(url=self.url,
-                                                      download_file_suffix='download_file'),
+            url="{url}{download_file_suffix}/".format(url=self.url,
+                                                      download_file_suffix="download_file"),
             destination_path=destination_path)
 
 
@@ -801,14 +796,14 @@ class AlertProcessDLLCollection(Collection):
     """
 
     MODEL_CLASS = AlertProcessDLL
-    URL_SUFFIX = 'dll'
+    URL_SUFFIX = "dll"
 
     def __init__(self, api_client, alert_process, obj_class=None):
         super(AlertProcessDLLCollection, self).__init__(api_client, obj_class)
         self.alert_process = alert_process
 
     def _get_url(self):
-        return '{process_url}{suffix}/'.format(process_url=self.alert_process.url,
+        return "{process_url}{suffix}/".format(process_url=self.alert_process.url,
                                                suffix=self.URL_SUFFIX)
 
 
@@ -832,8 +827,8 @@ class AlertProcess(BaseEntity):
         :param destination_path: Location on the disk where you want to save the file.
         """
         self._api_client.request_and_download(
-            url='{url}{download_file_suffix}/'.format(url=self.url,
-                                                      download_file_suffix='download_file'),
+            url="{url}{download_file_suffix}/".format(url=self.url,
+                                                      download_file_suffix="download_file"),
             destination_path=destination_path)
 
     def download_minidump(self, destination_path):
@@ -843,9 +838,9 @@ class AlertProcess(BaseEntity):
         :param destination_path: Location on the disk where you want to save the file.
         """
         self._api_client.request_and_download(
-            url='{url}{download_file_suffix}/'.format(url=self.url,
-                                                      download_file_suffix='download_minidump'),
-            destination_path='{}.dump'.format(destination_path))
+            url="{url}{download_file_suffix}/".format(url=self.url,
+                                                      download_file_suffix="download_minidump"),
+            destination_path="{}.dump".format(destination_path))
 
 
 class AlertProcessCollection(Collection):
@@ -855,14 +850,14 @@ class AlertProcessCollection(Collection):
     This entity will be returned by calling :py:meth:`api_client.Alert.get_processes`
     """
     MODEL_CLASS = AlertProcess
-    URL_SUFFIX = 'process'
+    URL_SUFFIX = "process"
 
     def __init__(self, api_client, alert, obj_class=None):
         super(AlertProcessCollection, self).__init__(api_client, obj_class)
         self.alert = alert
 
     def _get_url(self):
-        return '{alert_url}{suffix}/'.format(alert_url=self.alert.url, suffix=self.URL_SUFFIX)
+        return "{alert_url}{suffix}/".format(alert_url=self.alert.url, suffix=self.URL_SUFFIX)
 
 
 class Alert(BaseEntity):
@@ -874,14 +869,14 @@ class Alert(BaseEntity):
     which query was run on the DB, which SMB shares were accessed, etc.
     """
 
-    NAME = 'alert'
-    PROCESSES_URL_SUFFIX = 'processes'
+    NAME = "alert"
+    PROCESSES_URL_SUFFIX = "processes"
 
     def delete(self):
         """
         Delete the alert
         """
-        self._api_client.api_request(self.url, 'delete')
+        self._api_client.api_request(self.url, "delete")
 
     def download_image_file(self, location_with_name):
         """
@@ -889,13 +884,8 @@ class Alert(BaseEntity):
 
         :param location_with_name: Download destination path.
         """
-        response = self._api_client.api_request(url="{}{}".format(self.url, 'download_image_file/'),
-                                                stream=True)
-
-        file_path = "{}.bin".format(location_with_name)
-        with open(file_path, 'wb') as f:
-            response.raw.decode_content = True
-            shutil.copyfileobj(response.raw, f)
+        self._api_client.request_and_download(url="{}{}".format(self.url, "download_image_file/"),
+                                              destination_path="{}.bin".format(location_with_name))
 
     def download_memory_dump_file(self, location_with_name):
         """
@@ -903,14 +893,8 @@ class Alert(BaseEntity):
 
         :param location_with_name: Download destination path.
         """
-        response = self._api_client.api_request(url="{}{}".format(self.url,
-                                                                  'download_memory_dump_file/'),
-                                                stream=True)
-
-        file_path = "{}.bin".format(location_with_name)
-        with open(file_path, 'wb') as f:
-            response.raw.decode_content = True
-            shutil.copyfileobj(response.raw, f)
+        self._api_client.request_and_download(url="{}{}".format(self.url, "download_memory_dump_file/"),
+                                              destination_path="{}.bin".format(location_with_name))
 
     def download_network_capture_file(self, location_with_name):
         """
@@ -918,14 +902,8 @@ class Alert(BaseEntity):
 
         :param location_with_name: Download destination path.
         """
-        response = self._api_client.api_request(url="{}{}".format(self.url,
-                                                                  'download_network_capture_file/'),
-                                                stream=True)
-
-        file_path = "{}.pcap".format(location_with_name)
-        with open(file_path, 'wb') as f:
-            response.raw.decode_content = True
-            shutil.copyfileobj(response.raw, f)
+        self._api_client.request_and_download(url="{}{}".format(self.url, "download_network_capture_file/"),
+                                              destination_path="{}.pcap".format(location_with_name))
 
     def download_stix_file(self, location_with_name):
         """
@@ -933,13 +911,8 @@ class Alert(BaseEntity):
 
         :param location_with_name: Download destination path.
         """
-        response = self._api_client.api_request(url="{}{}".format(self.url, 'download_stix_file/'),
-                                                stream=True)
-
-        file_path = "{}.xml".format(location_with_name)
-        with open(file_path, 'wb') as f:
-            response.raw.decode_content = True
-            shutil.copyfileobj(response.raw, f)
+        self._api_client.request_and_download(url="{}{}".format(self.url, "download_stix_file/"),
+                                              destination_path="{}.xml".format(location_with_name))
 
     def get_processes(self):
         """
@@ -1038,15 +1011,9 @@ class AlertCollection(Collection):
 
         :param location_with_name: Download destination file.
         """
-        query_params = self._get_query_params()
-        response = self._api_client.api_request(url="{}{}".format(self._get_url(), 'export/'),
-                                                stream=True,
-                                                query_params=query_params)
-
-        file_path = "{}.csv".format(location_with_name)
-        with open(file_path, 'wb') as f:
-            response.raw.decode_content = True
-            shutil.copyfileobj(response.raw, f)
+        self._api_client.request_and_download(url="{}{}".format(self._get_url(), "export/"),
+                                              destination_path="{}.csv".format(location_with_name),
+                                              query_params=self._get_query_params())
 
     def delete(self, selected_alert_ids=None, delete_all_filtered=False):
         """
@@ -1065,14 +1032,14 @@ class AlertCollection(Collection):
         Example 2: Delete alerts by filter::
 
             client = mazerunner.connect(...)
-            filtered_alerts = client.alerts.filter(alert_types=['share', 'http'])
+            filtered_alerts = client.alerts.filter(alert_types=["share", "http"])
             filtered_alerts.delete(delete_all_filtered=True)
         """
         data = dict(selected_alert_ids=selected_alert_ids,
                     delete_all_filtered=delete_all_filtered)
         query_params = self._get_query_params()
-        self._api_client.api_request(url="{}{}".format(self._get_url(), 'delete_selected/'),
-                                     method='post',
+        self._api_client.api_request(url="{}{}".format(self._get_url(), "delete_selected/"),
+                                     method="post",
                                      data=data,
                                      query_params=query_params)
 
@@ -1083,7 +1050,7 @@ class ForensicPullerOnDemand(BaseCollection):
 
     This entity will be returned by :py:attr:`api_client.APIClient.forensic_puller_on_demand`.
     """
-    URL_EXTENSION = 'forensic-puller-on-demand-run'
+    URL_EXTENSION = "forensic-puller-on-demand-run"
 
     def run_on_ip_list(self, ip_list):
         """
@@ -1094,7 +1061,7 @@ class ForensicPullerOnDemand(BaseCollection):
         data = dict(ip_list=ip_list)
         self._api_client.api_request(
             url=self._get_url(),
-            method='post',
+            method="post",
             data=data)
 
 
@@ -1103,7 +1070,7 @@ class StorageUsageData(BaseCollection):
     Storage usage data.
     This entity will be returned by :py:attr:`api_client.APIClient.storage_usage_data`.
     """
-    URL_EXTENSION = 'storage-usage'
+    URL_EXTENSION = "storage-usage"
 
     def __unicode__(self):
         return unicode(self.details())
@@ -1112,7 +1079,7 @@ class StorageUsageData(BaseCollection):
         return str(self.details())
 
     def details(self):
-        return self._api_client.api_request(url=self._get_url(), method='get')
+        return self._api_client.api_request(url=self._get_url(), method="get")
 
     def _get_url(self):
         return self._api_client.api_urls[self.URL_EXTENSION]
@@ -1124,10 +1091,10 @@ class Endpoint(Entity):
     of the breadcrumbs' deployment to it.
     """
 
-    NAME = 'endpoint'
+    NAME = "endpoint"
 
     RELATED_FIELDS = {
-        'deployment_group': DeploymentGroup,
+        "deployment_group": DeploymentGroup,
     }
 
     def delete(self):
@@ -1135,9 +1102,9 @@ class Endpoint(Entity):
         Delete the endpoint.
         """
         base_url = self._api_client.api_urls[self.NAME]
-        url = '%sdelete_selected/?filter_enabled=true' % base_url
+        url = "%sdelete_selected/?filter_enabled=true" % base_url
         data = {"selected_endpoints_ids": [self.id]}
-        self._api_client.api_request(url, 'post', data=data)
+        self._api_client.api_request(url, "post", data=data)
 
     def reassign_to_group(self, deployment_group):
         self._api_client.endpoints.reassign_to_group(deployment_group, [self])
@@ -1154,18 +1121,18 @@ class EndpointCollection(EditableCollection):
     """
 
     MODEL_CLASS = Endpoint
-    UNASSIGN_FROM_DEPLOYMENT_GROUP = 'unassigned'
+    UNASSIGN_FROM_DEPLOYMENT_GROUP = "unassigned"
 
     RUN_METHOD_FOR_INSTALL_METHOD = {
-        'ZIP': 'CMD_DEPLOY',
-        'EXE': 'EXE_DEPLOY',
-        'MSI': 'EXE_DEPLOY'
+        "ZIP": "CMD_DEPLOY",
+        "EXE": "EXE_DEPLOY",
+        "MSI": "EXE_DEPLOY"
     }
 
     def __init__(self,
                  api_client,
                  filter_enabled=False,
-                 keywords='',
+                 keywords="",
                  statuses=None,
                  deploy_groups=None):
         """
@@ -1197,10 +1164,10 @@ class EndpointCollection(EditableCollection):
 
     def _get_query_params(self):
         return {
-            'filter_enabled': self.filter_enabled,
-            'keywords': self.keywords,
-            'statuses': self.statuses,
-            'deploy_groups': self.deploy_groups
+            "filter_enabled": self.filter_enabled,
+            "keywords": self.keywords,
+            "statuses": self.statuses,
+            "deploy_groups": self.deploy_groups
         }
 
     def filter(self, keywords=""):
@@ -1226,8 +1193,8 @@ class EndpointCollection(EditableCollection):
             selected_endpoints_ids=[e.id for e in endpoints])
 
         self._api_client.api_request(
-            "{}{}".format(self._get_url(), 'reassign_selected/'),
-            method='POST',
+            "{}{}".format(self._get_url(), "reassign_selected/"),
+            method="POST",
             data=data)
 
     def clear_deployment_group(self, endpoints):
@@ -1241,20 +1208,20 @@ class EndpointCollection(EditableCollection):
             selected_endpoints_ids=[ep.id for ep in endpoints])
 
         self._api_client.api_request(
-            "{}{}".format(self._get_url(), 'reassign_selected/'),
-            method='POST',
+            "{}{}".format(self._get_url(), "reassign_selected/"),
+            method="POST",
             data=data)
 
     def _get_run_method(self, install_method):
         if install_method not in self.RUN_METHOD_FOR_INSTALL_METHOD:
-            raise InvalidInstallMethodError('Invalid install method: %s' % install_method)
+            raise InvalidInstallMethodError("Invalid install method: %s" % install_method)
         return self.RUN_METHOD_FOR_INSTALL_METHOD[install_method.upper()]
 
     def clean_filtered(self,
                        install_method,
                        username,
                        password,
-                       domain=''):
+                       domain=""):
         """
         Uninstall breadcrumbs from all of the endpoints matching the filter.
 
@@ -1264,18 +1231,18 @@ class EndpointCollection(EditableCollection):
         :param domain: The domain where that user is registered. Leave blank for local user.
         """
 
-        self._api_client.api_request(url='{}{}'.format(self._get_url(), 'clean_selected/'),
-                                     method='POST',
+        self._api_client.api_request(url="{}{}".format(self._get_url(), "clean_selected/"),
+                                     method="POST",
                                      query_params=self._get_query_params(),
                                      data={
-                                         'clean_all_filtered': True,
-                                         'username': username,
-                                         'password': {
-                                             'value': password
+                                         "clean_all_filtered": True,
+                                         "username": username,
+                                         "password": {
+                                             "value": password
                                          },
-                                         'domain': domain,
-                                         'run_method': self._get_run_method(install_method),
-                                         'install_method': install_method
+                                         "domain": domain,
+                                         "run_method": self._get_run_method(install_method),
+                                         "install_method": install_method
                                      })
 
     def clean_by_endpoints_ids(self,
@@ -1283,7 +1250,7 @@ class EndpointCollection(EditableCollection):
                                install_method,
                                username,
                                password,
-                               domain=''):
+                               domain=""):
         """
         Uninstall breadcrumbs from all of the specified endpoint IDs.
 
@@ -1293,28 +1260,28 @@ class EndpointCollection(EditableCollection):
         :param password: Password for that user.
         :param domain: The domain where that user is registered. Leave blank for local user.
         """
-        self._api_client.api_request(url='{}{}'.format(self._get_url(), 'clean_selected/'),
-                                     method='POST',
+        self._api_client.api_request(url="{}{}".format(self._get_url(), "clean_selected/"),
+                                     method="POST",
                                      data={
-                                         'selected_endpoints_ids': endpoints_ids,
-                                         'username': username,
-                                         'password': {
-                                             'value': password
+                                         "selected_endpoints_ids": endpoints_ids,
+                                         "username": username,
+                                         "password": {
+                                             "value": password
                                          },
-                                         'domain': domain,
-                                         'run_method': self._get_run_method(install_method),
-                                         'install_method': install_method
+                                         "domain": domain,
+                                         "run_method": self._get_run_method(install_method),
+                                         "install_method": install_method
                                      })
 
     def delete_filtered(self):
         """
         Delete all the endpoints matching the filter.
         """
-        self._api_client.api_request(url='{}{}'.format(self._get_url(), 'delete_selected/'),
-                                     method='POST',
+        self._api_client.api_request(url="{}{}".format(self._get_url(), "delete_selected/"),
+                                     method="POST",
                                      query_params=self._get_query_params(),
                                      data={
-                                         'delete_all_filtered': True
+                                         "delete_all_filtered": True
                                      })
 
     def delete_by_endpoints_ids(self, endpoints_ids):
@@ -1323,17 +1290,17 @@ class EndpointCollection(EditableCollection):
 
         :param endpoints_ids: List of the endpoint IDs to be deleted.
         """
-        self._api_client.api_request(url='{}{}'.format(self._get_url(), 'delete_selected/'),
-                                     method='POST',
+        self._api_client.api_request(url="{}{}".format(self._get_url(), "delete_selected/"),
+                                     method="POST",
                                      data={
-                                         'selected_endpoints_ids': endpoints_ids,
+                                         "selected_endpoints_ids": endpoints_ids,
                                      })
 
     def export_filtered(self):
         """
         Export all filtered endpoints to CSV.
         """
-        return self._api_client.api_request(url='{}{}'.format(self._get_url(), 'export/'),
+        return self._api_client.api_request(url="{}{}".format(self._get_url(), "export/"),
                                             query_params=self._get_query_params(),
                                             expect_json_response=False)
 
@@ -1341,7 +1308,7 @@ class EndpointCollection(EditableCollection):
         """
         Get the available values for the endpoint filters.
         """
-        return self._api_client.api_request(url='{}{}'.format(self._get_url(), 'filter_data/'))
+        return self._api_client.api_request(url="{}{}".format(self._get_url(), "filter_data/"))
 
     def params(self):
         raise NotImplementedError
@@ -1354,13 +1321,13 @@ class BackgroundTask(BaseEntity):
     Examples of requests that create background tasks include deployment on endpoints, and importing
     the organization structure from Active Directory.
     """
-    NAME = 'background-task'
+    NAME = "background-task"
 
     def stop(self):
         """
         Stop task.
         """
-        self._api_client.api_request("{}{}".format(self.url, 'stop/'), 'post')
+        self._api_client.api_request("{}{}".format(self.url, "stop/"), "post")
 
 
 class BackgroundTaskCollection(Collection):
@@ -1397,7 +1364,7 @@ class BackgroundTaskCollection(Collection):
         """
         Acknowledge all tasks with the status 'stopped' or 'complete'.
         """
-        self._api_client.api_request("{}{}".format(self._get_url(), 'acknowledge_all/'), 'post')
+        self._api_client.api_request("{}{}".format(self._get_url(), "acknowledge_all/"), "post")
 
     def params(self):
         raise NotImplementedError
@@ -1412,7 +1379,7 @@ class AlertPolicy(BaseEntity):
     - 1 = Mute
     - 2 = Alert
     """
-    NAME = 'alert-policy'
+    NAME = "alert-policy"
 
     def update_to_status(self, to_status):
         """
@@ -1421,7 +1388,7 @@ class AlertPolicy(BaseEntity):
         :param to_status: The name of the new 'to_status' of the policy.
         """
         data = dict(to_status=to_status)
-        response = self._api_client.api_request(self.url, 'put', data=data)
+        response = self._api_client.api_request(self.url, "put", data=data)
         self._update_entity_data(response)
 
 
@@ -1448,7 +1415,7 @@ class AlertPolicyCollection(Collection):
         """
         Reset the 'to_status' of all alert policies to their original system default.
         """
-        self._api_client.api_request("{}{}".format(self._get_url(), 'reset_all/'), 'post')
+        self._api_client.api_request("{}{}".format(self._get_url(), "reset_all/"), "post")
 
 
 class CIDRMapping(BaseEntity):
@@ -1460,23 +1427,23 @@ class CIDRMapping(BaseEntity):
     mapping, the daily CIDR block importer will also assign that deployment
     group to endpoints that were just imported or did not have one configured.
     """
-    NAME = 'cidr-mapping'
+    NAME = "cidr-mapping"
 
     def generate_endpoints(self):
         """
         Scan the CIDR block and import the endpoints.
         """
-        return self._api_client.api_request('{}{}'.format(self.url, 'generate_endpoints/'),
-                                            method='post',
+        return self._api_client.api_request("{}{}".format(self.url, "generate_endpoints/"),
+                                            method="post",
                                             data={
-                                                'reassign': False
+                                                "reassign": False
                                             })
 
     def delete(self):
         """
         Delete this record.
         """
-        self._api_client.api_request(self.url, 'delete')
+        self._api_client.api_request(self.url, "delete")
 
 
 class CIDRMappingCollection(UnpaginatedEditableCollection):
@@ -1499,21 +1466,21 @@ class CIDRMappingCollection(UnpaginatedEditableCollection):
         :param active: Whether this block should be included in the import.
         """
         return self.create_item({
-            'cidr_block': cidr_block,
-            'deployment_group': deployment_group,
-            'comments': comments,
-            'active': active
+            "cidr_block": cidr_block,
+            "deployment_group": deployment_group,
+            "comments": comments,
+            "active": active
         })
 
     def generate_all_endpoints(self):
         """
         Scan all the active CIDR blocks in the system and import all of their endpoints.
         """
-        return self._api_client.api_request('{}{}'.format(self._get_url(),
-                                                          'generate_all_endpoints/'),
-                                            method='post',
+        return self._api_client.api_request("{}{}".format(self._get_url(),
+                                                          "generate_all_endpoints/"),
+                                            method="post",
                                             data={
-                                                'reassign': False
+                                                "reassign": False
                                             })
 
     def params(self):
@@ -1525,7 +1492,7 @@ class ActiveSOCEvent(Entity):
     A message to be sent to a SOC interface.
     """
 
-    NAME = 'api-soc'
+    NAME = "api-soc"
 
 
 class ActiveSOCEventCollection(EditableCollection):
@@ -1561,7 +1528,7 @@ class ActiveSOCEventCollection(EditableCollection):
             source=soc_name,
             data=events_dicts
         )
-        self._api_client.api_request(self._get_url(), 'post', data=data)
+        self._api_client.api_request(self._get_url(), "post", data=data)
 
     def params(self):
         raise NotImplementedError
@@ -1594,10 +1561,10 @@ class APIClient(object):
 
     Example::
 
-            client = mazerunner.connect(ip_address='1.2.3.4',
-                                           api_key='my-api-key',
-                                           api_secret='my-api-secret',
-                                           certificate='/path/to/MazeRunner.crt')
+            client = mazerunner.connect(ip_address="1.2.3.4",
+                                           api_key="my-api-key",
+                                           api_secret="my-api-secret",
+                                           certificate="/path/to/MazeRunner.crt")
 
             my_service = client.services.get_item(id=8)
     """
@@ -1615,13 +1582,13 @@ class APIClient(object):
             self._certificate = False
         else:
             self._certificate = certificate
-        self._base_url = 'https://%(host)s' % dict(host=host)
+        self._base_url = "https://%(host)s" % dict(host=host)
         self._session = requests.Session()
-        self.api_urls = self.api_request('/api/v1.0/')
+        self.api_urls = self.api_request("/api/v1.0/")
 
     def api_request(self,
                     url,
-                    method='get',
+                    method="get",
                     query_params=None,
                     data=None,
                     files=None,
@@ -1650,7 +1617,7 @@ class APIClient(object):
             netloc=parsed.netloc,
             path=parsed.path,
             params=parsed.params,
-            query='',
+            query="",
             fragment=parsed.fragment)
         url = urlparse.urlunparse(parsed_no_query)
         query = {query_param_name: set(query_param_value)
@@ -1667,10 +1634,10 @@ class APIClient(object):
             auth=self._auth
         )
         if not files:
-            request_args['json'] = data
+            request_args["json"] = data
         else:
-            request_args['data'] = data
-            request_args['files'] = files
+            request_args["data"] = data
+            request_args["files"] = files
 
         req = requests.Request(**request_args)
         resp = self._session.send(req.prepare(), verify=self._certificate, stream=stream)
@@ -1685,7 +1652,7 @@ class APIClient(object):
             return resp
 
         if method == "delete" or resp.status_code == NO_CONTENT:
-            return
+            return None
 
         content_type = resp.headers.get("Content-Type", None)
 
@@ -1707,9 +1674,9 @@ class APIClient(object):
                 "Bad response: Not json.\nContent:\n{content}".format(content=resp.content)
             )
 
-    def request_and_download(self, url, destination_path):
-        data = self.api_request(url, stream=True)
-        with open(destination_path, 'wb') as f:
+    def request_and_download(self, url, destination_path, query_params=None):
+        data = self.api_request(url, stream=True, query_params=query_params)
+        with open(destination_path, "wb") as f:
             data.raw.decode_content = True
             shutil.copyfileobj(data.raw, f)
 
@@ -1723,10 +1690,10 @@ class APIClient(object):
 
             client = mazerunner.connect(...)
             backup_server_story_decoy = client.decoys.create(
-                name='backup_server_decoy',
-                os='Windows_Server_2012',
-                hostname='backupserver',
-                vm_type='KVM')
+                name="backup_server_decoy",
+                os="Windows_Server_2012",
+                hostname="backupserver",
+                vm_type="KVM")
 
             old_decoy = client.decoys.get_item(id=5)
             old_decoy.delete()
@@ -1743,8 +1710,8 @@ class APIClient(object):
 
             client = mazerunner.connect(...)
             app_db_service = client.services.create(
-                name='app_db_service',
-                service_type='mysql')
+                name="app_db_service",
+                service_type="mysql")
         """
         return ServiceCollection(self)
 
@@ -1758,7 +1725,7 @@ class APIClient(object):
 
             client = mazerunner.connect(...)
             hr_deployment_group = client.deployment_groups.create(
-                name='breadcrumbs_for_hr_machines')
+                name="breadcrumbs_for_hr_machines")
         """
         return DeploymentGroupCollection(self)
 
@@ -1772,10 +1739,10 @@ class APIClient(object):
 
             client = mazerunner.connect(...)
             mysql_breadcrumb = client.breadcrumbs.create(
-                breadcrumb_type='mysql',
-                name='mysql_breadcrumb',
-                deploy_for='root',
-                installation_type='mysql_history')
+                breadcrumb_type="mysql",
+                name="mysql_breadcrumb",
+                deploy_for="root",
+                installation_type="mysql_history")
             """
         return BreadcrumbCollection(self)
 
@@ -1788,7 +1755,7 @@ class APIClient(object):
         Example::
 
             client = mazerunner.connect(...)
-            code_alerts = client.alerts.filter(alert_types=['code'])
+            code_alerts = client.alerts.filter(alert_types=["code"])
         """
         return AlertCollection(self)
 
@@ -1801,7 +1768,7 @@ class APIClient(object):
         Example::
 
             client = mazerunner.connect(...)
-            code_alerts = client.forensic_puller_on_demand.run_on_ip_list(ip_list=['192.168.1.1'])
+            code_alerts = client.forensic_puller_on_demand.run_on_ip_list(ip_list=["192.168.1.1"])
         """
         return ForensicPullerOnDemand(self)
 
@@ -1860,12 +1827,12 @@ class APIClient(object):
         Example::
 
             client = mazerunner.connect(...)
-            self.active_soc_events.create_multiple_events('my-soc-interface-name', [{
-                'ComputerName': 'TEST_ENDPOINT1',
-                'EventCode': 4625
+            self.active_soc_events.create_multiple_events("my-soc-interface-name", [{
+                "ComputerName": "TEST_ENDPOINT1",
+                "EventCode": 4625
             },{
-                'ComputerName': 'TEST_ENDPOINT2',
-                'EventCode': 529
+                "ComputerName": "TEST_ENDPOINT2",
+                "EventCode": 529
             }])
         """
         return ActiveSOCEventCollection(self)
@@ -1880,9 +1847,9 @@ class APIClient(object):
 
             client = mazerunner.connect(...)
             developers_segment = client.cidr_mapping.create(
-                cidr_block='192.168.5.0/24',
+                cidr_block="192.168.5.0/24",
                 deployment_group=5,
-                comments='R&D',
+                comments="R&D",
                 active=True)
             developers_segment.generate_endpoints()
         """

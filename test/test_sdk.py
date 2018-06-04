@@ -215,11 +215,15 @@ SSH_GROUP_NAME = "ssh_deployment_group"
 SSH_BREADCRUMB_NAME = "ssh_breadcrumb"
 SSH_SERVICE_NAME = "ssh_service"
 SSH_DECOY_NAME = "ssh_decoy"
-
 SSH_GROUP_NAME_UPDATE = "ssh_deployment_group_update"
 SSH_BREADCRUMB_NAME_UPDATE = "ssh_breadcrumb_update"
 SSH_SERVICE_NAME_UPDATE = "ssh_service_update"
 SSH_DECOY_NAME_UPDATE = "ssh_decoy_update"
+HONEYDOC_GROUP_NAME = "honeydoc_deployment_group"
+HONEYDOC_BREADCRUMB_NAME = "honeydoc_breadcrumb"
+HONEYDOC_SERVICE_NAME = "honeydoc_service"
+HONEYDOC_SERVICE_SERVER_SUFFIX = "server_suffix"
+HONEYDOC_DECOY_NAME = "honeydoc_decoy"
 
 OVA_DECOY = "ova_decoy"
 
@@ -332,6 +336,38 @@ class TestGeneralFlow(APITest):
         with pytest.raises(ValidationError):
             self.services.create(name=invalid_service, service_type=invalid_service)
         self.assert_entity_name_not_in_collection(invalid_service, self.services)
+
+    def test_honeydoc_breadcrumb(self):
+        logger.debug("test_honeydoc_breadcrumb called")
+        downloaded_docx_file_path = "test/downloaded.docx"
+        self.file_paths_for_cleanup.append(downloaded_docx_file_path)
+        deployment_group = self.deployment_groups.create(name=HONEYDOC_GROUP_NAME,
+                                                         description="test deployment group")
+        breadcrumb_honeydoc = self.breadcrumbs.create(name=HONEYDOC_BREADCRUMB_NAME,
+                                                      breadcrumb_type="honey_doc",
+                                                      deployment_groups=[deployment_group.id],
+                                                      monitor_from_external_host=False,
+                                                      file_field_name="docx_file_content",
+                                                      file_path="test/sample.docx")
+        service_honeydoc = self.services.create(name=HONEYDOC_SERVICE_NAME,
+                                                service_type="honey_doc",
+                                                server_suffix=HONEYDOC_SERVICE_SERVER_SUFFIX)
+        decoy_honeydoc = self.create_decoy(dict(name=HONEYDOC_DECOY_NAME,
+                                                hostname="decoyhoneydoc",
+                                                os="Ubuntu_1404",
+                                                vm_type="KVM"))
+        service_honeydoc.load()
+        breadcrumb_honeydoc.load()
+        self.assert_entity_name_in_collection(HONEYDOC_GROUP_NAME, breadcrumb_honeydoc.deployment_groups)
+        breadcrumb_honeydoc.connect_to_service(service_honeydoc.id)
+        service_honeydoc.connect_to_decoy(decoy_honeydoc.id)
+        service_honeydoc.load()
+        breadcrumb_honeydoc.load()
+        self.power_on_decoy(decoy_honeydoc)
+        decoy_honeydoc.load()
+        breadcrumb_honeydoc.download_breadcrumb_honeydoc(downloaded_docx_file_path)
+        assert os.path.exists(downloaded_docx_file_path)
+        assert os.path.getsize(downloaded_docx_file_path) > 0
 
 
 class TestDecoy(APITest):
@@ -992,7 +1028,7 @@ class TestEndpoints(APITest):
 
             endpoints = list(self.endpoints.filter(self.lab_endpoint_ip))
             assert len(endpoints) > 0
-            self.endpoints.delete_by_endpoints_ids([endpoints[0].id])
+            self.endpoints.delete_by_endpoints_ids([curr_endpoint.id for curr_endpoint in endpoints])
             assert len(self.endpoints.filter(self.lab_endpoint_ip)) == 0
 
         def _test_data():
