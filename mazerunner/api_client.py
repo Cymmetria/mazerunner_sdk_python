@@ -9,7 +9,8 @@ import requests_hawk
 from mazerunner.exceptions import ValidationError, ServerError, BadParamError, \
     InvalidInstallMethodError
 
-ALERTS_PER_PAGE = 500
+ENTRIES_PER_PAGE = 500
+ISO_TIME_FORMAT = "%Y-%m-%d"
 
 
 class BaseCollection(object):
@@ -964,7 +965,7 @@ class AlertCollection(Collection):
         return dict(filter_enabled=self.filter_enabled,
                     only_alerts=self.only_alerts,
                     alert_types=self.alert_types,
-                    per_page=ALERTS_PER_PAGE,
+                    per_page=ENTRIES_PER_PAGE,
                     start_date=self.start_date,
                     end_date=self.end_date,
                     id_gt=self.id_greater_than,
@@ -1540,6 +1541,67 @@ class ActiveSOCEventCollection(EditableCollection):
         raise NotImplementedError
 
 
+class AuditLogLine(Entity):
+    """
+    A message from the server's audit log
+    """
+    NAME = "audit-log"
+
+
+class AuditLogLineCollection(Collection):
+    """
+    Use this to access MazeRunner's audit log.
+
+    This entity will be returned by :py:attr:`api_client.APIClient.audit_log`.
+    """
+    MODEL_CLASS = AuditLogLine
+
+    def __init__(self, api_client, filter_enabled=False, item=None, username=None, event_type=None, keywords=None,
+                 start_date=None, end_date=None, object_ids=None, category=None):
+        super(AuditLogLineCollection, self).__init__(api_client)
+        self.filter_enabled = filter_enabled
+        self.end_date = end_date
+        self.start_date = start_date
+        self.username = username
+        self.category = category
+        self.event_type = event_type
+        self.object_ids = object_ids
+        self.item = item
+        self.keywords = keywords
+
+    def _get_query_params(self):
+        return {'filter_enabled': self.filter_enabled,
+                'end_date': self.end_date,
+                'start_date': self.start_date,
+                'per_page': ENTRIES_PER_PAGE,
+                'username[]': self.username,
+                'category[]': self.category,
+                'event_type[]': self.event_type,
+                'object_ids': self.object_ids,
+                'item': self.item}
+
+    def filter(self, filter_enabled=True, item=None, username=None, event_type=None,
+               start_date=None, end_date=None, object_ids=None, category=None):
+
+        for param_name, param in dict(username=username,
+                                      event_type=event_type,
+                                      category=category).iteritems():
+            if param and type(param) != list:
+                raise BadParamError("{} has to be a list!".format(param_name))
+        return AuditLogLineCollection(self._api_client,
+                                      filter_enabled=filter_enabled,
+                                      end_date=end_date,
+                                      start_date=start_date,
+                                      username=username,
+                                      category=category,
+                                      event_type=event_type,
+                                      object_ids=object_ids,
+                                      item=item)
+
+    def delete(self):
+        self._api_client.api_request("".join([self._get_url(), "delete_audit_log/"]), method="post")
+
+
 class APIClient(object):
     """
     This is the starting point for any interaction with MazeRunner.
@@ -1854,3 +1916,7 @@ class APIClient(object):
             developers_segment.generate_endpoints()
         """
         return CIDRMappingCollection(self)
+
+    @property
+    def audit_log(self):
+        return AuditLogLineCollection(self)

@@ -1,5 +1,6 @@
 import StringIO
 import csv
+import datetime
 import json
 import logging
 import shutil
@@ -13,7 +14,7 @@ import mazerunner
 import os
 
 from mazerunner.api_client import Service, AlertPolicy, Decoy, Breadcrumb, \
-    DeploymentGroup, Endpoint, CIDRMapping, BackgroundTask
+    DeploymentGroup, Endpoint, CIDRMapping, BackgroundTask, AuditLogLine, ISO_TIME_FORMAT
 from mazerunner.exceptions import ValidationError, ServerError, BadParamError, \
     InvalidInstallMethodError
 from utils import TimeoutException, wait_until
@@ -95,6 +96,7 @@ class APITest(object):
         self.cidr_mappings = self.client.cidr_mappings
         self.endpoints = self.client.endpoints
         self.background_tasks = self.client.background_tasks
+        self.audit_log = self.client.audit_log
 
         self.disposable_entities = [
             self.decoys,
@@ -1112,3 +1114,152 @@ class TestEndpoints(APITest):
                         assert error[key] == [expected_error_message]
                 else:
                     assert error["non_field_errors"] == [expected_error_message]
+
+
+class TestAuditLog(APITest):
+
+    @staticmethod
+    def _format_time(date_obj):
+        return date_obj.strftime(ISO_TIME_FORMAT)
+
+    def _test_time_based_queries(self):
+        today = datetime.datetime.now()
+        tomorrow = today + datetime.timedelta(days=1)
+        a_week_ago = today + datetime.timedelta(days=-7)
+        two_weeks_ago = today + datetime.timedelta(days=-14)
+
+        # check that today has data - start date
+        assert len(self.audit_log.filter(start_date=self._format_time(today))) != 0, \
+            "No data from today according to start date"
+
+        # and that tomorrow doesn't - start date
+        assert len(self.audit_log.filter(start_date=self._format_time(tomorrow))) == 0, \
+            "Data from tomorrow found!"
+
+        # check that today has data - end date
+        assert len(self.audit_log.filter(end_date=self._format_time(today))) != 0, \
+            "No data from today according to end date"
+
+        # and that last week doesn't - end date
+        assert len(self.audit_log.filter(end_date=self._format_time(a_week_ago))) == 0, \
+            "Data from a week ago found, even though we deleted everything!"
+
+        # test time range
+        assert len(self.audit_log.filter(start_date=self._format_time(a_week_ago),
+                                         end_date=self._format_time(today))) != 0, \
+            "No logs from the past week"
+
+        assert len(self.audit_log.filter(start_date=self._format_time(two_weeks_ago),
+                                         end_date=self._format_time(a_week_ago))) == 0, \
+            "Logs found from two weeks ago."
+
+    def _test_object_ids_queries(self, log_count):
+        # get obj ids from server
+        object_ids = [log_line._param_dict.get("object_ids") for log_line in self.audit_log]
+        # and extract them
+        object_ids = list(set([object_id[0] if object_id else None for object_id in object_ids]))
+
+        # and make sure you have enough obj ids
+        assert len(object_ids) >= 2, "No more than 1 object ID in the system"
+
+        # test that you don't get all the alerts when filtering
+        usable_object_id = [object_id for object_id in object_ids if object_id][0]
+
+        assert len(self.audit_log.filter(object_ids=usable_object_id)) != log_count, \
+            "Object ID filter returned the same amount of logs as the full filter"
+
+    def _test_username_queries(self, log_count):
+        user_id = self.client._auth.credentials['id']
+
+        # make sure that if the username is right you get data
+        assert len(self.audit_log.filter(username=[user_id])) != 0, "No logs found for the user"
+
+        # Note: we don't have more than one user in the tests, therefore we don't
+        # have a test that filters one user's info
+
+        # check that a bad username doesnt provide any data
+        bad_username = user_id * 2
+        assert len(self.audit_log.filter(username=[bad_username])) == 0, \
+            "Logs found for the (probably) nonexistent user {}".format(bad_username)
+
+        # test users not list ERR
+        with pytest.raises(BadParamError):
+            self.audit_log.filter(username=user_id)
+
+    def _test_category_queries(self, log_count):
+        # get categories from server
+        categories = list(set([log_line._param_dict.get("category") for log_line in self.audit_log]))
+
+        # and make sure you have enough
+        assert len(categories) >= 2, "No more than 1 category in the system"
+
+        # make sure the param is OK
+        assert len(self.audit_log.filter(category=[categories[0]])) != 0, \
+            "No logs for previously existing filter value"
+
+        # test that you don't get all the alerts when filtering
+        assert len(self.audit_log.filter(category=[categories[0]])) != log_count, \
+            "Filtered list returned the same amount of logs as the full filter"
+
+        # test categories not list ERR
+        with pytest.raises(BadParamError):
+            self.audit_log.filter(category=categories[0])
+
+    def _test_event_type_queries(self, log_count):
+        # get event_types from server
+        event_types = list(set([log_line._param_dict.get("event_type_label") for log_line in self.audit_log]))
+
+        # and make sure you have enough
+        assert len(event_types) >= 2, "No more than 1 event type in the system."
+
+        # make sure the param is OK
+        assert len(self.audit_log.filter(event_type=[event_types[0]])) != 0, \
+            "No logs for previously existing filter value"
+
+        # test that you don't get all the alerts when filtering
+        assert len(self.audit_log.filter(event_type=[event_types[0]])) != log_count, \
+            "Filtered list returned the same amount of logs as the full filter"
+
+        # test event type not list ERR
+        with pytest.raises(BadParamError):
+            self.audit_log.filter(event_type=event_types[0])
+
+    def test_audit_log_query(self):
+
+        # test delete (at the start for a clean log)
+        self.audit_log.delete()
+        logger.info("Audit log cleared")
+
+        # build all sorts of logs
+        decoy_ssh = self.create_decoy(dict(name=SSH_DECOY_NAME,
+                                           hostname="decoyssh",
+                                           os="Ubuntu_1404",
+                                           vm_type="KVM"))
+
+        # test query
+        log_count = self.audit_log
+        assert len(log_count) != 0, "No logs found"
+        assert type(list(self.audit_log)[0]) == AuditLogLine, "Invalid output"
+
+        self._test_time_based_queries()
+        self._test_object_ids_queries(log_count)
+        self._test_username_queries(log_count)
+        self._test_category_queries(log_count)
+        self._test_event_type_queries(log_count)
+
+        # test filter=False with params
+        assert len(self.audit_log.filter(event_type=["Delete"], filter_enabled=False)) == \
+               len(self.audit_log.filter(event_type=["Action"], filter_enabled=False)), \
+            "filter_enabled = False should make other filters redundant"
+
+        # test delete (again to make sure the log is actually cleaned)
+        self.audit_log.delete()
+        assert len(self.audit_log) != 0, "No delete log!"
+        assert len(self.audit_log) == 1, "Other logs found"
+
+    # once this issue is fixed we need to use the provided data from the decoy creation to actually filter items
+    @pytest.mark.xfail(reason="Item filtering is broken on server side")
+    def test_audit_log_item_filter(self):
+        # look for an item that doesnt exist
+        INVALID_ITEM_FILTER = "qweasdzxc"
+        assert len(self.audit_log.filter(item=INVALID_ITEM_FILTER)) == 0
