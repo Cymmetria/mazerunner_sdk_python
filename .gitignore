@@ -12,3 +12,4 @@ dist
 .sdk
 htmlcov
 test_deployments
+venv
