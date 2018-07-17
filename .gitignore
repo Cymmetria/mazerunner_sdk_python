@@ -13,3 +13,4 @@ dist
 htmlcov
 test_deployments
 venv
+.pytest_cache

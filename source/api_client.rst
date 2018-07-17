@@ -148,3 +148,27 @@ ActiveSOC events
    :members:
    :inherited-members:
    :exclude-members: MODEL_CLASS
+
+
+Audit log events
+================
+.. autoclass:: api_client.AuditLogLineCollection
+   :members:
+   :inherited-members:
+   :exclude-members: MODEL_CLASS
+
+
+Storage usage data
+==================
+.. autoclass:: api_client.StorageUsageData
+   :members:
+   :inherited-members:
+   :exclude-members: MODEL_CLASS
+
+
+Forensic puller on demand
+=========================
+.. autoclass:: api_client.ForensicPullerOnDemand
+   :members:
+   :inherited-members:
+   :exclude-members: MODEL_CLASS
