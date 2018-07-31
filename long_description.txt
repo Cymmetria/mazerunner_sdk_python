@@ -1,8 +1,0 @@
-This library implements a convenient client for MazeRunner™ API for Python.
-Using this library, you will be able to easily configure and manipulate the key features
-of MazeRunner, such as the creation of a deception campaign, turning decoys on or off, deployment on
-remote endpoints, and inspecting alerts with their attached evidence.
-
-See the documentation at https://community.cymmetria.com/api
-
-Fork us at https://github.com/Cymmetria/mazerunner_sdk_python
