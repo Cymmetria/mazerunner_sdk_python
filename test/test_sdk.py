@@ -1,37 +1,48 @@
 import StringIO
 import csv
+import datetime
 import json
 import logging
 import shutil
 from stat import S_IRUSR
 
 import pytest
-from contextlib2 import suppress
 from retrying import retry
 from subprocess import Popen
 
 import mazerunner
 import os
 
-from mazerunner.api_client import DeploymentGroupCollection, \
-    BreadcrumbCollection, ServiceCollection, DecoyCollection, Service, \
-    AlertPolicy, CIDRMappingCollection, BackgroundTaskCollection, \
-    EndpointCollection
+from mazerunner.api_client import Service, AlertPolicy, Decoy, Breadcrumb, \
+    DeploymentGroup, Endpoint, CIDRMapping, BackgroundTask, AuditLogLine, ISO_TIME_FORMAT
 from mazerunner.exceptions import ValidationError, ServerError, BadParamError, \
     InvalidInstallMethodError
 from utils import TimeoutException, wait_until
 
+CLEAR_SYSTEM_ERROR_MESSAGE = 'System must be clean before running this test. Use the '\
+                             '--initial_clean flag to do this automatically'
 ENDPOINT_IP_PARAM = 'endpoint_ip'
 ENDPOINT_USERNAME_PARAM = 'endpoint_username'
 ENDPOINT_PASSWORD_PARAM = 'endpoint_password'
 
 CODE_EXECUTION_ALERT_TYPE = 'code'
+FORENSIC_DATA_ALERT_TYPE = 'forensic_puller'
 
 MAZERUNNER_IP_ADDRESS_PARAM = 'ip_address'
 API_ID_PARAM = 'id'
 API_SECRET_PARAM = 'secret'
 MAZERUNNER_CERTIFICATE_PATH_PARAM = 'mazerunner_certificate_path'
-INITIAL_DEPLOYMENT_GROUPS = 1
+
+ENTITIES_CONFIGURATION = {
+    Decoy: [],
+    Service: [],
+    Breadcrumb: [],
+    DeploymentGroup: [1],
+    Endpoint: [],
+    CIDRMapping: [],
+    BackgroundTask: []
+}
+
 
 TEST_DEPLOYMENTS_FILE_PATH = os.path.join(os.path.dirname(__file__), 'test_deployments/dep.zip')
 TEST_DEPLOYMENTS_FOLDER_PATH = os.path.dirname(TEST_DEPLOYMENTS_FILE_PATH)
@@ -60,10 +71,6 @@ class MachineStatus(object):
 
 # noinspection PyMethodMayBeStatic,PyAttributeOutsideInit
 class APITest(object):
-    DISPOSABLE_TYPES = [
-        DecoyCollection, BreadcrumbCollection, DeploymentGroupCollection,
-        CIDRMappingCollection, BackgroundTaskCollection, EndpointCollection, ServiceCollection
-    ]
 
     runslow = pytest.mark.skipif(not pytest.config.getoption('--runslow'),
                                  reason='--runslow not activated')
@@ -71,13 +78,13 @@ class APITest(object):
                                        reason='--lab_dependent not activated')
 
     def _assert_clean_system(self):
-        assert len(self.decoys) == 0
-        assert len(self.services) == 0
-        assert len(self.breadcrumbs) == 0
-        assert len(self.deployment_groups) == INITIAL_DEPLOYMENT_GROUPS
-        assert len(self.cidr_mappings) == 0
-        assert len(self.endpoints) == 0
-        assert len(self.background_tasks) == 0
+        for entity_collection in self.disposable_entities:
+            existing_ids = {entity.id for entity in entity_collection}
+            expected_ids = set(ENTITIES_CONFIGURATION[entity_collection.MODEL_CLASS])
+
+            assert existing_ids == expected_ids, CLEAR_SYSTEM_ERROR_MESSAGE
+
+        assert len(self.background_tasks) == 0, CLEAR_SYSTEM_ERROR_MESSAGE
 
     def _configure_entities_groups(self):
         self.decoys = self.client.decoys
@@ -89,6 +96,16 @@ class APITest(object):
         self.cidr_mappings = self.client.cidr_mappings
         self.endpoints = self.client.endpoints
         self.background_tasks = self.client.background_tasks
+        self.audit_log = self.client.audit_log
+
+        self.disposable_entities = [
+            self.decoys,
+            self.services,
+            self.breadcrumbs,
+            self.deployment_groups,
+            self.endpoints,
+            self.cidr_mappings
+        ]
 
     def setup_method(self, method):
         logger.debug("setup_method called")
@@ -112,37 +129,27 @@ class APITest(object):
             certificate=self.mazerunner_certificate_path)
 
         self._configure_entities_groups()
-        self._assert_clean_system()
 
-        self._register_existing_elements()
+        if pytest.config.option.initial_clean:
+            self._destroy_new_entities()
+
+        self._assert_clean_system()
 
         self.file_paths_for_cleanup = []
 
         _clear_deployment_path()
 
-    def _register_existing_elements(self):
-
-        def _get_group_elements(group):
-            return [element.id
-                    for element
-                    in group(self.client)]
-
-        self._existing_elements_by_type = {
-            group: _get_group_elements(group)
-            for group
-            in self.DISPOSABLE_TYPES
-        }
-
     def _destroy_new_entities(self):
+        for entity_collection in self.disposable_entities:
+            for entity in list(entity_collection):
+                initial_ids = ENTITIES_CONFIGURATION[entity_collection.MODEL_CLASS]
+                if entity.id not in initial_ids:
+                    wait_until(entity.delete, exc_list=[ServerError, ValidationError],
+                               check_return_value=False)
 
-        def _get_items(group):
-            return list(group(self.client))
+        self.background_tasks.acknowledge_all_complete()
 
-        for entity_group in self.DISPOSABLE_TYPES:
-            for entity in _get_items(entity_group):
-                if entity.id not in self._existing_elements_by_type[entity_group]:
-                    with suppress(ServerError):
-                        entity.delete()
+        wait_until(self._assert_clean_system, exc_list=[AssertionError], check_return_value=False)
 
     def teardown_method(self, method):
         logger.debug("teardown_method called")
@@ -210,11 +217,15 @@ SSH_GROUP_NAME = "ssh_deployment_group"
 SSH_BREADCRUMB_NAME = "ssh_breadcrumb"
 SSH_SERVICE_NAME = "ssh_service"
 SSH_DECOY_NAME = "ssh_decoy"
-
 SSH_GROUP_NAME_UPDATE = "ssh_deployment_group_update"
 SSH_BREADCRUMB_NAME_UPDATE = "ssh_breadcrumb_update"
 SSH_SERVICE_NAME_UPDATE = "ssh_service_update"
 SSH_DECOY_NAME_UPDATE = "ssh_decoy_update"
+HONEYDOC_GROUP_NAME = "honeydoc_deployment_group"
+HONEYDOC_BREADCRUMB_NAME = "honeydoc_breadcrumb"
+HONEYDOC_SERVICE_NAME = "honeydoc_service"
+HONEYDOC_SERVICE_SERVER_SUFFIX = "server_suffix"
+HONEYDOC_DECOY_NAME = "honeydoc_decoy"
 
 OVA_DECOY = "ova_decoy"
 
@@ -224,11 +235,13 @@ class TestGeneralFlow(APITest):
         logger.debug("test_api_setup_campaign called")
 
         # Create deployment group:
-        assert len(self.deployment_groups) == INITIAL_DEPLOYMENT_GROUPS
+        assert {dg.id for dg in self.deployment_groups} == \
+               set(ENTITIES_CONFIGURATION[DeploymentGroup])
         deployment_group = self.deployment_groups.create(name=SSH_GROUP_NAME,
                                                          description="test deployment group")
         self.assert_entity_name_in_collection(SSH_GROUP_NAME, self.deployment_groups)
-        assert len(self.deployment_groups) == INITIAL_DEPLOYMENT_GROUPS + 1
+        assert {dg.id for dg in self.deployment_groups} == \
+            set(ENTITIES_CONFIGURATION[DeploymentGroup] + [deployment_group.id])
 
         # Create breadcrumb:
         assert len(self.breadcrumbs) == 0
@@ -242,7 +255,7 @@ class TestGeneralFlow(APITest):
 
         # Create service:
         assert len(self.services) == 0
-        service_ssh = self.services.create(name=SSH_SERVICE_NAME, service_type="ssh")
+        service_ssh = self.services.create(name=SSH_SERVICE_NAME, service_type="ssh", any_user="false")
         self.assert_entity_name_in_collection(SSH_SERVICE_NAME, self.services)
         assert len(self.services) == 1
 
@@ -308,7 +321,7 @@ class TestGeneralFlow(APITest):
         self.assert_entity_name_in_collection(SSH_GROUP_NAME, self.deployment_groups)
         self.assert_entity_name_not_in_collection(SSH_GROUP_NAME_UPDATE, self.deployment_groups)
 
-        service_ssh.update(name=SSH_SERVICE_NAME_UPDATE)
+        service_ssh.update(name=SSH_SERVICE_NAME_UPDATE, any_user="false")
 
         breadcrumb_ssh.detach_from_service(service_ssh.id)
         self.assert_entity_name_not_in_collection(SSH_SERVICE_NAME,
@@ -320,6 +333,43 @@ class TestGeneralFlow(APITest):
         self.power_off_decoy(decoy_ssh)
         decoy_ssh.load()
         assert decoy_ssh.machine_status == MachineStatus.INACTIVE
+
+        invalid_service = "invalid_service"
+        with pytest.raises(ValidationError):
+            self.services.create(name=invalid_service, service_type=invalid_service)
+        self.assert_entity_name_not_in_collection(invalid_service, self.services)
+
+    def test_honeydoc_breadcrumb(self):
+        logger.debug("test_honeydoc_breadcrumb called")
+        downloaded_docx_file_path = "test/downloaded.docx"
+        self.file_paths_for_cleanup.append(downloaded_docx_file_path)
+        deployment_group = self.deployment_groups.create(name=HONEYDOC_GROUP_NAME,
+                                                         description="test deployment group")
+        breadcrumb_honeydoc = self.breadcrumbs.create(name=HONEYDOC_BREADCRUMB_NAME,
+                                                      breadcrumb_type="honey_doc",
+                                                      deployment_groups=[deployment_group.id],
+                                                      monitor_from_external_host=False,
+                                                      file_field_name="docx_file_content",
+                                                      file_path="test/sample.docx")
+        service_honeydoc = self.services.create(name=HONEYDOC_SERVICE_NAME,
+                                                service_type="honey_doc",
+                                                server_suffix=HONEYDOC_SERVICE_SERVER_SUFFIX)
+        decoy_honeydoc = self.create_decoy(dict(name=HONEYDOC_DECOY_NAME,
+                                                hostname="decoyhoneydoc",
+                                                os="Ubuntu_1404",
+                                                vm_type="KVM"))
+        service_honeydoc.load()
+        breadcrumb_honeydoc.load()
+        self.assert_entity_name_in_collection(HONEYDOC_GROUP_NAME, breadcrumb_honeydoc.deployment_groups)
+        breadcrumb_honeydoc.connect_to_service(service_honeydoc.id)
+        service_honeydoc.connect_to_decoy(decoy_honeydoc.id)
+        service_honeydoc.load()
+        breadcrumb_honeydoc.load()
+        self.power_on_decoy(decoy_honeydoc)
+        decoy_honeydoc.load()
+        breadcrumb_honeydoc.download_breadcrumb_honeydoc(downloaded_docx_file_path)
+        assert os.path.exists(downloaded_docx_file_path)
+        assert os.path.getsize(downloaded_docx_file_path) > 0
 
 
 class TestDecoy(APITest):
@@ -341,7 +391,11 @@ class TestDecoy(APITest):
 
         # Download decoy:
         download_file_path = "mazerunner/ova_image"
-        ova_decoy.download(location_with_name=download_file_path)
+
+        # Wait until the decoy becomes available and download the file
+        wait_until(ova_decoy.download, location_with_name=download_file_path,
+                   check_return_value=False, exc_list=[ValidationError], total_timeout=60*10)
+
         self.file_paths_for_cleanup.append("{}.ova".format(download_file_path))
 
     def test_decoy_update(self):
@@ -423,7 +477,7 @@ class TestDeploymentGroups(APITest):
                                            hostname="decoyssh",
                                            os="Ubuntu_1404",
                                            vm_type="KVM"))
-        service_ssh = self.services.create(name=SSH_SERVICE_NAME, service_type="ssh")
+        service_ssh = self.services.create(name=SSH_SERVICE_NAME, service_type="ssh", any_user="false")
         service_ssh.connect_to_decoy(decoy_ssh.id)
 
         dep_group = self.deployment_groups.create(name='test_check_conflicts')
@@ -457,7 +511,7 @@ class TestDeploymentGroups(APITest):
         assert dep_group.check_conflicts('Windows') == [
             {
                 u'error': u"Conflict between breadcrumbs ssh1 and ssh2: "
-                          u"Two SSH breadcrumb can't point to the same "
+                          u"Two SSH breadcrumbs can't point to the same "
                           u"user/decoy combination on the same endpoint"
             }
         ]
@@ -468,7 +522,7 @@ class TestDeploymentGroups(APITest):
                                            os="Ubuntu_1404",
                                            vm_type="KVM"))
 
-        service_ssh = self.services.create(name=SSH_SERVICE_NAME, service_type="ssh")
+        service_ssh = self.services.create(name=SSH_SERVICE_NAME, service_type="ssh", any_user="false")
 
         bc_ssh = self.breadcrumbs.create(name='ssh1',
                                          breadcrumb_type="ssh",
@@ -482,6 +536,13 @@ class TestDeploymentGroups(APITest):
         bc_ssh.add_to_group(dep_group.id)
 
         self.power_on_decoy(decoy_ssh)
+
+        def _has_complete_bg_tasks():
+            return len([bg_task for bg_task in self.background_tasks.filter(running=False)]) > 0
+
+        def _wait_and_destroy_background_task():
+            wait_until(_has_complete_bg_tasks, check_return_value=True)
+            self.background_tasks.acknowledge_all_complete()
 
         def _test_manual_deployment():
             dep_group.deploy(location_with_name=TEST_DEPLOYMENTS_FILE_PATH.replace('.zip', ''),
@@ -502,14 +563,6 @@ class TestDeploymentGroups(APITest):
             os.remove(TEST_DEPLOYMENTS_FILE_PATH)
 
         def _test_auto_deployment():
-            with pytest.raises(ValidationError):
-                dep_group.auto_deploy(username=None,
-                                      password=None,
-                                      install_method='PS_EXEC',
-                                      run_method='EXE_DEPLOY',
-                                      domain='',
-                                      deploy_on="all")
-
             # Since this runs asynchronously and it has nothing to deploy on, we only want to see
             # that the request was accepted
 
@@ -520,6 +573,8 @@ class TestDeploymentGroups(APITest):
                                   domain='',
                                   deploy_on="all")
 
+            _wait_and_destroy_background_task()
+
             self.deployment_groups.auto_deploy_groups(
                 username='some-user',
                 password='some-pass',
@@ -529,8 +584,23 @@ class TestDeploymentGroups(APITest):
                 domain='',
                 deploy_on="all")
 
+            _wait_and_destroy_background_task()
+
         _test_manual_deployment()
         _test_auto_deployment()
+
+    def forensic_puller_alert_is_shown(self):
+        alerts = list(self.alerts.filter(filter_enabled=True,
+                                         only_alerts=False,
+                                         alert_types=[FORENSIC_DATA_ALERT_TYPE]))
+        return bool(alerts)
+
+    @pytest.mark.skip("needs auto deploy setting credentials")
+    @APITest.lab_dependent
+    def test_forensic_puller_on_demand(self):
+        ## TODO: Add setting global deployment credentials here.
+        self.client.forensic_puller_on_demand.run_on_ip_list(ip_list=[self.lab_endpoint_ip])
+        wait_until(self.forensic_puller_alert_is_shown)
 
     @APITest.lab_dependent
     def test_deployment_credentials(self):
@@ -653,7 +723,7 @@ class TestAlert(APITest):
                                                hostname="decoyssh",
                                                os="Ubuntu_1404",
                                                vm_type="KVM"))
-            service_ssh = self.services.create(name=SSH_SERVICE_NAME, service_type="ssh")
+            service_ssh = self.services.create(name=SSH_SERVICE_NAME, service_type="ssh", any_user="false")
             service_ssh.connect_to_decoy(decoy_ssh.id)
 
             bc_ssh1 = self.breadcrumbs.create(name='ssh1',
@@ -731,14 +801,17 @@ class TestAlert(APITest):
 
 class TestEntity(APITest):
     def test_repr(self):
-        service = self.services.create(name=SSH_SERVICE_NAME, service_type="ssh")
-        assert str(service) == "<Service: url=u'https://{serv}/api/v1.0/service/{service_id}/' " \
-            "service_type=u'ssh' id={service_id} name=u'ssh_service'>".format(
-            serv=self.mazerunner_ip_address,
-            service_id=service.id)
+        service = self.services.create(name=SSH_SERVICE_NAME, service_type="ssh", any_user="false")
+
+        str_service = "<Service: available_decoys=[] name=u'ssh_service' service_type_name=u'SSH' " \
+                      "url=u'https://{serv}/api/v1.0/service/{service_id}/' " \
+                      "is_active=False attached_decoys=[] any_user={any_user} is_delete_enabled=True " \
+                      "service_type=u'ssh' id={service_id}>"\
+            .format(serv=self.mazerunner_ip_address, service_id=service.id, any_user=service.any_user)
+        assert str(service) == str_service
 
     def test_get_attribute(self):
-        service = self.services.create(name=SSH_SERVICE_NAME, service_type="ssh")
+        service = self.services.create(name=SSH_SERVICE_NAME, service_type="ssh", any_user="false")
         assert service.name == SSH_SERVICE_NAME
 
         with pytest.raises(AttributeError):
@@ -786,7 +859,8 @@ class TestService(APITest):
         self.services.create(name=SSH_BREADCRUMB_NAME,
                              service_type="http",
                              zip_file_path=site_data_file,
-                             web_apps=['phpmyadmin'])
+                             web_apps=['phpmyadmin'],
+                             https_active=False)
 
         assert len(self.client.services) == 1
 
@@ -922,7 +996,29 @@ class TestEndpoints(APITest):
 
         def _test_reassignment(ep):
             dep_group = self.deployment_groups.create(name='ep1_test', description='test')
+
+            # Assign via collection
             self.endpoints.reassign_to_group(dep_group, [ep])
+            assert self.endpoints.get_item(ep.id).deployment_group.id == dep_group.id
+
+            # Clear via collection
+            self.endpoints.clear_deployment_group([ep])
+            assert self.endpoints.get_item(ep.id).deployment_group is None
+
+            # Assign via entity
+            all_breadcrumbs_deployment_group = self.deployment_groups.get_item(
+                self.deployment_groups.ALL_BREADCRUMBS_DEPLOYMENT_GROUP_ID)
+            endpoint.reassign_to_group(all_breadcrumbs_deployment_group)
+            assert self.endpoints.get_item(ep.id).deployment_group.id == \
+                   all_breadcrumbs_deployment_group.id
+
+            # Clear via entity
+            ep.clear_deployment_group()
+            assert self.endpoints.get_item(ep.id).deployment_group is None
+
+            # Eventually leave the endpoint with the new deployment group assigned
+            ep.reassign_to_group(dep_group)
+            assert self.endpoints.get_item(ep.id).deployment_group.id == dep_group.id
 
         def _test_delete():
             self.endpoints.filter('no.such.endpoints').delete_filtered()
@@ -934,7 +1030,7 @@ class TestEndpoints(APITest):
 
             endpoints = list(self.endpoints.filter(self.lab_endpoint_ip))
             assert len(endpoints) > 0
-            self.endpoints.delete_by_endpoints_ids([endpoints[0].id])
+            self.endpoints.delete_by_endpoints_ids([curr_endpoint.id for curr_endpoint in endpoints])
             assert len(self.endpoints.filter(self.lab_endpoint_ip)) == 0
 
         def _test_data():
@@ -949,7 +1045,6 @@ class TestEndpoints(APITest):
             ])
 
             assert isinstance(self.endpoints.filter_data(), dict)
-            assert isinstance(self.endpoints.status_dashboard(), list)
 
         def _test_stop_import():
             _destroy_elements()
@@ -979,3 +1074,192 @@ class TestEndpoints(APITest):
         _test_delete()
         _test_data()
         _test_stop_import()
+
+    def test_create_endpoint(self):
+        for params in [
+            dict(ip_address='1.1.1.1'),
+            dict(dns='endpoint_address.endpoint.local'),
+            dict(hostname='hostname'),
+            dict(dns='endpoint_address.endpoint.local', ip_address='1.1.1.1'),
+        ]:
+            endpoint = self.endpoints.create(**params)
+            assert endpoint
+            for key, value in params.iteritems():
+                assert getattr(endpoint, key) == value
+            assert len(self.endpoints) == 1
+            endpoint.delete()
+
+    def test_create_endpoint_with_deployment_group(self):
+        ip_address = "1.1.1.1"
+        endpoint = self.endpoints.create(ip_address=ip_address, deployment_group_id=1)
+        assert endpoint.ip_address == ip_address
+        assert endpoint.deployment_group.name == "All Breadcrumbs"
+        endpoint.delete()
+
+    def test_create_invalid_endpoint(self):
+        for params, expected_error_message in [
+            (dict(ip_address='1.1.1.1.1'), "Enter a valid IPv4 address."),
+            (dict(dns='A'*256), "Maximum field length is 255 characters"),
+            (dict(hostname='A'*16), "Maximum field length is 15 characters"),
+            (dict(), "You must provide either dns, hostname, or ip address"),
+        ]:
+            try:
+                self.endpoints.create(**params)
+                raise AssertionError, "Creation of the endpoint should raise an exception"
+            except ValidationError as e:
+                error = json.loads(e.message)
+                if params:
+                    for key in params:
+                        assert key in error
+                        assert error[key] == [expected_error_message]
+                else:
+                    assert error["non_field_errors"] == [expected_error_message]
+
+
+class TestAuditLog(APITest):
+
+    @staticmethod
+    def _format_time(date_obj):
+        return date_obj.strftime(ISO_TIME_FORMAT)
+
+    def _test_time_based_queries(self):
+        today = datetime.datetime.now()
+        tomorrow = today + datetime.timedelta(days=1)
+        a_week_ago = today + datetime.timedelta(days=-7)
+        two_weeks_ago = today + datetime.timedelta(days=-14)
+
+        # check that today has data - start date
+        assert len(self.audit_log.filter(start_date=self._format_time(today))) != 0, \
+            "No data from today according to start date"
+
+        # and that tomorrow doesn't - start date
+        assert len(self.audit_log.filter(start_date=self._format_time(tomorrow))) == 0, \
+            "Data from tomorrow found!"
+
+        # check that today has data - end date
+        assert len(self.audit_log.filter(end_date=self._format_time(today))) != 0, \
+            "No data from today according to end date"
+
+        # and that last week doesn't - end date
+        assert len(self.audit_log.filter(end_date=self._format_time(a_week_ago))) == 0, \
+            "Data from a week ago found, even though we deleted everything!"
+
+        # test time range
+        assert len(self.audit_log.filter(start_date=self._format_time(a_week_ago),
+                                         end_date=self._format_time(today))) != 0, \
+            "No logs from the past week"
+
+        assert len(self.audit_log.filter(start_date=self._format_time(two_weeks_ago),
+                                         end_date=self._format_time(a_week_ago))) == 0, \
+            "Logs found from two weeks ago."
+
+    def _test_object_ids_queries(self, log_count):
+        # get obj ids from server
+        object_ids = [log_line._param_dict.get("object_ids") for log_line in self.audit_log]
+        # and extract them
+        object_ids = list(set([object_id[0] if object_id else None for object_id in object_ids]))
+
+        # and make sure you have enough obj ids
+        assert len(object_ids) >= 2, "No more than 1 object ID in the system"
+
+        # test that you don't get all the alerts when filtering
+        usable_object_id = [object_id for object_id in object_ids if object_id][0]
+
+        assert len(self.audit_log.filter(object_ids=usable_object_id)) != log_count, \
+            "Object ID filter returned the same amount of logs as the full filter"
+
+    def _test_username_queries(self, log_count):
+        user_id = self.client._auth.credentials['id']
+
+        # make sure that if the username is right you get data
+        assert len(self.audit_log.filter(username=[user_id])) != 0, "No logs found for the user"
+
+        # Note: we don't have more than one user in the tests, therefore we don't
+        # have a test that filters one user's info
+
+        # check that a bad username doesnt provide any data
+        bad_username = user_id * 2
+        assert len(self.audit_log.filter(username=[bad_username])) == 0, \
+            "Logs found for the (probably) nonexistent user {}".format(bad_username)
+
+        # test users not list ERR
+        with pytest.raises(BadParamError):
+            self.audit_log.filter(username=user_id)
+
+    def _test_category_queries(self, log_count):
+        # get categories from server
+        categories = list(set([log_line._param_dict.get("category") for log_line in self.audit_log]))
+
+        # and make sure you have enough
+        assert len(categories) >= 2, "No more than 1 category in the system"
+
+        # make sure the param is OK
+        assert len(self.audit_log.filter(category=[categories[0]])) != 0, \
+            "No logs for previously existing filter value"
+
+        # test that you don't get all the alerts when filtering
+        assert len(self.audit_log.filter(category=[categories[0]])) != log_count, \
+            "Filtered list returned the same amount of logs as the full filter"
+
+        # test categories not list ERR
+        with pytest.raises(BadParamError):
+            self.audit_log.filter(category=categories[0])
+
+    def _test_event_type_queries(self, log_count):
+        # get event_types from server
+        event_types = list(set([log_line._param_dict.get("event_type_label") for log_line in self.audit_log]))
+
+        # and make sure you have enough
+        assert len(event_types) >= 2, "No more than 1 event type in the system."
+
+        # make sure the param is OK
+        assert len(self.audit_log.filter(event_type=[event_types[0]])) != 0, \
+            "No logs for previously existing filter value"
+
+        # test that you don't get all the alerts when filtering
+        assert len(self.audit_log.filter(event_type=[event_types[0]])) != log_count, \
+            "Filtered list returned the same amount of logs as the full filter"
+
+        # test event type not list ERR
+        with pytest.raises(BadParamError):
+            self.audit_log.filter(event_type=event_types[0])
+
+    def test_audit_log_query(self):
+
+        # test delete (at the start for a clean log)
+        self.audit_log.delete()
+        logger.info("Audit log cleared")
+
+        # build all sorts of logs
+        decoy_ssh = self.create_decoy(dict(name=SSH_DECOY_NAME,
+                                           hostname="decoyssh",
+                                           os="Ubuntu_1404",
+                                           vm_type="KVM"))
+
+        # test query
+        log_count = self.audit_log
+        assert len(log_count) != 0, "No logs found"
+        assert type(list(self.audit_log)[0]) == AuditLogLine, "Invalid output"
+
+        self._test_time_based_queries()
+        self._test_object_ids_queries(log_count)
+        self._test_username_queries(log_count)
+        self._test_category_queries(log_count)
+        self._test_event_type_queries(log_count)
+
+        # test filter=False with params
+        assert len(self.audit_log.filter(event_type=["Delete"], filter_enabled=False)) == \
+               len(self.audit_log.filter(event_type=["Action"], filter_enabled=False)), \
+            "filter_enabled = False should make other filters redundant"
+
+        # test delete (again to make sure the log is actually cleaned)
+        self.audit_log.delete()
+        assert len(self.audit_log) != 0, "No delete log!"
+        assert len(self.audit_log) == 1, "Other logs found"
+
+    # once this issue is fixed we need to use the provided data from the decoy creation to actually filter items
+    @pytest.mark.xfail(reason="Item filtering is broken on server side")
+    def test_audit_log_item_filter(self):
+        # look for an item that doesnt exist
+        INVALID_ITEM_FILTER = "qweasdzxc"
+        assert len(self.audit_log.filter(item=INVALID_ITEM_FILTER)) == 0

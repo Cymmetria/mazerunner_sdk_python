@@ -71,6 +71,24 @@ Alerts
    :inherited-members:
    :exclude-members: MODEL_CLASS
 
+.. autoclass:: api_client.AlertProcess
+   :members:
+   :inherited-members:
+
+.. autoclass:: api_client.AlertProcessCollection
+   :members:
+   :inherited-members:
+   :exclude-members: MODEL_CLASS
+
+.. autoclass:: api_client.AlertProcessDLL
+   :members:
+   :inherited-members:
+
+.. autoclass:: api_client.AlertProcessDLLCollection
+   :members:
+   :inherited-members:
+   :exclude-members: MODEL_CLASS
+
 
 Endpoints
 =========
@@ -127,6 +145,30 @@ CIDR mapping
 ActiveSOC events
 ================
 .. autoclass:: api_client.ActiveSOCEventCollection
+   :members:
+   :inherited-members:
+   :exclude-members: MODEL_CLASS
+
+
+Audit log events
+================
+.. autoclass:: api_client.AuditLogLineCollection
+   :members:
+   :inherited-members:
+   :exclude-members: MODEL_CLASS
+
+
+Storage usage data
+==================
+.. autoclass:: api_client.StorageUsageData
+   :members:
+   :inherited-members:
+   :exclude-members: MODEL_CLASS
+
+
+Forensic puller on demand
+=========================
+.. autoclass:: api_client.ForensicPullerOnDemand
    :members:
    :inherited-members:
    :exclude-members: MODEL_CLASS

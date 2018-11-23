@@ -1,7 +1,7 @@
-'''
-This sample script creates a deployment group with each of the available breadcrumb types
+"""
+This sample script creates a deployment group with the requested breadcrumb type
 and downloads the deployment package
-'''
+"""
 import random
 import argparse
 import zipfile
@@ -10,6 +10,9 @@ import tempfile
 import time
 
 import mazerunner
+from mazerunner.exceptions import ValidationError
+
+COMMON_SAMPLE_PASSWORD = ['password', '12345678', 'xyzvbnm,', 'qwertyui']
 
 
 def _create_temp_file():
@@ -61,7 +64,7 @@ BREADCRUMB_DATA = {
         'requires_username': False,
         'requires_password': False,
         'args': {'browser': 'chrome', 'subservice': 'phpmyadmin'},
-        'required_service':{'type': 'http', 'decoy': 'DMZ Server', 'args': {
+        'required_service': {'type': 'http', 'decoy': 'DMZ Server', 'args': {
             'web_apps': ['phpmyadmin'], 'zip_file_path': _create_dummy_zip_file()
         }}
     },
@@ -69,7 +72,7 @@ BREADCRUMB_DATA = {
         'requires_username': True,
         'requires_password': True,
         'args': {},
-        'required_service':{'type': 'smb', 'decoy': 'Windows Server', 'args': {
+        'required_service': {'type': 'smb', 'decoy': 'Windows Server', 'args': {
             'share_name': 'transfer_files', 'zip_file_path': _create_dummy_zip_file()
         }}
     },
@@ -77,7 +80,7 @@ BREADCRUMB_DATA = {
         'requires_username': True,
         'requires_password': True,
         'args': {},
-        'required_service':{'type': 'git', 'decoy': 'Development Server', 'args': {
+        'required_service': {'type': 'git', 'decoy': 'Development Server', 'args': {
             'repository_name': 'backend', 'zip_file_path': _create_dummy_zip_file()
         }}
     },
@@ -90,8 +93,8 @@ BREADCRUMB_DATA = {
     'netshare': {
         'requires_username': True,
         'requires_password': True,
-        'args': {},
-        'required_service':{'type': 'smb', 'decoy': 'Windows Server', 'args': {
+        'args': {'persistence': 'non_persistent'},
+        'required_service': {'type': 'smb', 'decoy': 'Windows Server', 'args': {
             'share_name': 'transfer_files', 'zip_file_path': _create_dummy_zip_file()
         }}
     },
@@ -99,7 +102,7 @@ BREADCRUMB_DATA = {
         'requires_username': True,
         'requires_password': True,
         'args': {'network_name': 'office'},
-        'required_service':{'type': 'openvpn', 'decoy': 'DMZ Server', 'args': {
+        'required_service': {'type': 'openvpn', 'decoy': 'DMZ Server', 'args': {
             'cert_country': 'US',
             'cert_state': 'CA',
             'cert_city': 'San Francisco',
@@ -111,19 +114,19 @@ BREADCRUMB_DATA = {
         'requires_username': True,
         'requires_password': True,
         'args': {},
-        'required_service':{'type': 'rdp', 'decoy': 'Windows Server', 'args': {}}
+        'required_service': {'type': 'rdp', 'decoy': 'Windows Server', 'args': {}}
     },
     'ssh': {
         'requires_username': True,
         'requires_password': True,
         'args': {},
-        'required_service':{'type': 'ssh', 'decoy': 'DMZ Server', 'args': {}}
+        'required_service': {'type': 'ssh', 'decoy': 'DMZ Server', 'args': {}}
     },
     'ssh_privatekey': {
         'requires_username': True,
         'requires_password': False,
-        'args': {'deploy_for': 'last_login', 'installation_type': 'alias'},
-        'required_service':{'type': 'ssh', 'decoy': 'DMZ Server', 'args': {}}
+        'args': {'deploy_for': 'root', 'installation_type': 'alias'},
+        'required_service': {'type': 'ssh', 'decoy': 'DMZ Server', 'args': {}}
     },
 }
 
@@ -143,12 +146,24 @@ def get_args():
                         type=str,
                         help='The file path to the SSL certificate of the '
                              'MazeRunner management server')
-    parser.add_argument('deployment_group_name', type=str, help='The name of the deployment group to be created')
-    parser.add_argument('username', type=str, help='The username that will be shared among the breadcrumbs')
-    parser.add_argument('os', type=str, choices=['Windows', 'Linux'],
-                        help='The OS for which we want to get a deployment script pack')
-    parser.add_argument('-p', '--passwords', required=False, type=str, help='The file path to a list of passwords')
-    parser.add_argument('-f', '--format', required=False, type=str, choices=['ZIP', 'EXE', 'MSI'], default='ZIP',
+    parser.add_argument('deployment_group_name',
+                        type=str,
+                        help='The name of the deployment group to be created')
+    parser.add_argument('username',
+                        type=str,
+                        help='The username that will be shared among the breadcrumbs')
+    parser.add_argument('breadcrumb_type', type=str, choices=BREADCRUMB_DATA.keys())
+    parser.add_argument('-p',
+                        '--passwords',
+                        required=False,
+                        type=str,
+                        help='The file path to a list of passwords')
+    parser.add_argument('-f',
+                        '--format',
+                        required=False,
+                        type=str,
+                        choices=['ZIP', 'EXE', 'MSI'],
+                        default='ZIP',
                         help='The file format for the deployment script pack')
     return parser.parse_args()
 
@@ -162,7 +177,7 @@ def _get_password(passwords_file):
             data = f.read()
             passwords = [p.strip() for p in data.split('\n') if p.strip()]
     else:
-        passwords = ['password', '12345678', 'xyzvbnm,', 'qwertyui'] # default common passwords
+        passwords = COMMON_SAMPLE_PASSWORD
 
     return random.choice(passwords)
 
@@ -216,7 +231,8 @@ def create_service_if_needed(client, service_data):
         args['name'] = service_name
         service = client.services.create(**args)
 
-    if 'zip_file_path' in service_data['args'] and os.path.exists(service_data['args']['zip_file_path']):
+    if 'zip_file_path' in service_data['args'] and \
+            os.path.exists(service_data['args']['zip_file_path']):
         os.remove(service_data['args']['zip_file_path'])
 
     decoy = create_decoy_if_needed(client, service_data['decoy'])
@@ -272,23 +288,22 @@ def main():
     """
     args = get_args()
 
-    client = mazerunner.connect(args.ip_address, args.api_key, args.api_secret, args.certificate, False)
+    client = mazerunner.connect(args.ip_address, args.api_key, args.api_secret, args.certificate)
 
     password = _get_password(args.passwords)
 
     deployment_group = client.deployment_groups.create(name=args.deployment_group_name)
 
-    for breadcrumb_type in BREADCRUMB_DATA:
-        breadcrumb = create_breadcrumb(
-            client,
-            breadcrumb_type,
-            BREADCRUMB_DATA[breadcrumb_type],
-            args.username,
-            password,
-            args.deployment_group_name)
-        breadcrumb.add_to_group(deployment_group.id)
+    breadcrumb = create_breadcrumb(
+        client,
+        args.breadcrumb_type,
+        BREADCRUMB_DATA[args.breadcrumb_type],
+        args.username,
+        password,
+        args.deployment_group_name)
+    breadcrumb.add_to_group(deployment_group.id)
 
-    print "Waiting for deployment group to be available - this takes a few minutes"
+    print "Waiting for deployment group to become available - this may take a few minutes"
 
     deployment_group.load()
     while not deployment_group.is_active:
@@ -296,13 +311,20 @@ def main():
         deployment_group.load()
 
     save_to = '%s' % args.deployment_group_name
-    deployment_group.deploy(
-        location_with_name=save_to,
-        os=args.os,
-        download_type="install",
-        download_format=args.format)
 
-    print "Deployment package saved to %s.%s" % (save_to, args.format.lower())
+    for operating_system in ['Windows', 'Linux']:
+        try:
+            deployment_group.deploy(
+                location_with_name='%s_%s' % (save_to, operating_system),
+                os=operating_system,
+                download_type="install",
+                download_format=args.format)
+        except ValidationError:
+            print 'This breadcrumb is not supported on %s, skipping' % operating_system
+
+        print "%s deployment package saved to %s.%s" % (operating_system,
+                                                        save_to,
+                                                        args.format.lower())
 
 if __name__ == '__main__':
     main()

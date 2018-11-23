@@ -11,6 +11,7 @@ import time
 
 import mazerunner
 
+
 def _create_temp_file():
     """
     this function creates an empty temporary file and returns a path to the file
@@ -44,9 +45,12 @@ def get_args():
     parser.add_argument('api_key', type=str, help="The API key")
     parser.add_argument('api_secret', type=str, help="The API secret")
     parser.add_argument('certificate',
-                        type=str, help="The file path to the SSL certificate of the MazeRunner management server")
+                        type=str,
+                        help="The file path to the SSL certificate "
+                             "of the MazeRunner management server")
     parser.add_argument('usernames_file', type=str, help="The file path to a list of usernames")
-    parser.add_argument('-p', '--passwords', required=False, type=str, help="The file path to a list of passwords")
+    parser.add_argument('-p', '--passwords', required=False, type=str,
+                        help="The file path to a list of passwords")
     return parser.parse_args()
 
 
@@ -70,14 +74,15 @@ def main():
 
     # Connect to the MazeRunner API
     # The client object holds your session data and allows you to access the MazeRunner resources
-    client = mazerunner.connect(args.ip_address, args.api_key, args.api_secret, args.certificate, False)
-    
+    client = mazerunner.connect(args.ip_address, args.api_key, args.api_secret, args.certificate)
+
     # Create a decoy
     # This will create a decoy virtual machine inside MazeRunner.
     # The decoy acts as a trap,
     # Any action done on the decoy is monitored and will generate an alert on MazeRunner
     print "Creating Decoy"
-    decoy = client.decoys.create(name="Backup Server Decoy", hostname="nas-backup-02", os="Ubuntu_1404", vm_type="KVM")
+    decoy = client.decoys.create(name="Backup Server Decoy", hostname="nas-backup-02",
+                                 os="Ubuntu_1404", vm_type="KVM")
     while decoy.machine_status != "not_seen":  # make sure the decoy was created
         time.sleep(5)
         decoy.load()
@@ -110,14 +115,17 @@ def main():
     print "Creating Breadcrumbs"
     for idx, username in enumerate(usernames):
         # Create breadcrumb
-        # Breadcrumbs can be deployed on endpoints to trick an attacker to interact with a decoy and generate an alert
+        # Breadcrumbs can be deployed on endpoints to trick
+        # an attacker to interact with a decoy and generate an alert
         breadcrumb = client.breadcrumbs.create(
             name="SMB Breadcrumb %d" % idx,
             breadcrumb_type="netshare",
             username=username,
-            password=random.choice(passwords))
+            password=random.choice(passwords),
+            persistence='persistent',
+            registry_entry_name='test registry entry')
 
-        # Connect the breadrumb to the service
+        # Connect the breadcrumb to the service
         # When a breadcrumb is connected to a service, the credential and other information
         # found in the breadcrumb will be usable with the service
         breadcrumb.connect_to_service(service.id)
