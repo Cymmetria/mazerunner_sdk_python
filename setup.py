@@ -28,7 +28,7 @@ setup(
     keywords=['cymmetria', 'mazerunner', 'sdk', 'api'],
     install_requires=["argparse==1.2.1",
                       "mohawk==0.3.4",
-                      "requests==2.13.0",
+                      "requests==2.20.0",
                       "requests-hawk==1.0.0",
                       "six==1.10.0",
                       "wsgiref==0.1.2"],
